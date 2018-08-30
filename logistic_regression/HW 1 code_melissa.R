@@ -1,7 +1,7 @@
 library(tidyverse)
 library(haven)
 library(broom)
-
+#########
 # read the sas dataset into an R dataframe
 
 train <- read_sas("C:\\Users\\Melissa Sandahl\\OneDrive\\Documents\\School\\MSA courses\\AA502\\Logistic Regression\\data\\insurance_t.sas7bdat")
