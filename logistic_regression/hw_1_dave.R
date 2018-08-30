@@ -69,3 +69,7 @@ ggplot(gather(train_reduced, key, value, -c(BRANCH, RES)), aes(value)) +
   facet_wrap(~ key, scales = "free") +
   theme_bw()
 
+
+#im adding new code
+A = matrix(c(1,1,1,4))
+
