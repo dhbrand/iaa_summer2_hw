@@ -11,6 +11,8 @@ train <- read_sas("logistic_regression//insurance_t.sas7bdat")
 
 # look at the structure of the dataframe to see the class of each variable
 str(train)
+p_summary <- psych::describe(train)
+h_summary <- Hmisc::describe(train)
 
 
 # create a character vector which counts all the missing values for variables
@@ -51,7 +53,8 @@ ggplot(gather(train_no_NAs, key, value, -c(BRANCH, RES)), aes(value)) +
   # according to the variable in the plot instead all the same
   facet_wrap(~ key, scales = "free") +
   # better looking theme
-  theme_bw()
+  theme_bw() +
+  labs(y = "Frequncy of Each Variable", x = "Multiple Variables Defined Above", title = "Histograms for the Variables with no Missing Observations")
 
 # filtering binary variables where one count is less than 1000
 check <- train_no_NAs %>%
@@ -147,4 +150,5 @@ ggplot(gather(train_missing, key, value), aes(value)) +
   # according to the variable in the plot instead all the same
   facet_wrap(~ key, scales = "free") +
   # better looking theme
-  theme_bw()
+  theme_bw() +
+  labs(y = "Frequncy of Each Variable", x = "Multiple Variables Defined Above", title = "Histograms for the Variables with Missing Observations")
