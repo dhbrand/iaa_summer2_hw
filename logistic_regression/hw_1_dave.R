@@ -6,6 +6,8 @@ library(broom)
 library(MASS)
 library(visreg)
 library(brglm)
+
+library(mctest)
 # read the sas dataset into an R dataframe
 train <- read_sas("logistic_regression//insurance_t.sas7bdat")
 
@@ -119,6 +121,7 @@ fit3 <- glm(INS ~ DDABAL + DEP + CHECKS + TELLER
             data = train_reduced, family = binomial(link = "logit"))
 summary(fit3)
 
+
 # adding the credit score back in because it only had 195 missing obs
 fit4 <- glm(INS ~ DDABAL + DEP + CHECKS + TELLER 
             + SAVBAL + ATMAMT + BRANCH + CRSCORE,
@@ -152,3 +155,35 @@ ggplot(gather(train_missing, key, value), aes(value)) +
   # better looking theme
   theme_bw() +
   labs(y = "Frequncy of Each Variable", x = "Multiple Variables Defined Above", title = "Histograms for the Variables with Missing Observations")
+
+ggplot(train, aes(DDABAL)) +
+  geom_histogram(bins = 50) +
+  scale_x_continuous(limits = c(.5, 20000))
+
+ddtest <- train %>% 
+  dplyr::select(DDABAL) %>% 
+  filter(DDABAL != 0) %>% 
+  mutate(group = rep(0, length(DDABAL)))
+
+ddtest[ddtest$group > mean(ddtest$DDABAL)] <- 1
+
+mean(ddtest); sd(DDABAL)
+ggplot(ddtest, aes(DDABAL)) +
+  geom_histogram(bins = 50) +
+  scale_x_continuous(limits = c(.5, 20000))
+
+t.test(DDABAL ~ group, ddtest)
+n_distinct(ddtest$group)
+
+
+# MC testing
+X <- train_reduced %>% 
+  dplyr::select(- c(INS, BRANCH) )
+Y <- train_reduced %>% 
+  dplyr::select(INS)
+imcdiag(X, Y)
+
+
+GGally::ggpairs(X)
+
+car::vif(fit2)
