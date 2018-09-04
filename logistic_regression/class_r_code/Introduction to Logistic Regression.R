@@ -14,10 +14,8 @@ library(MASS)
 library(visreg)
 library(brglm)
 
-# read in data
-data_dir <- "data/"
-input_file <- "lowbwt.csv"
-lowbwt <- read.csv(paste(data_dir, input_file, sep = ""), header = TRUE)
+# read in data=
+lowbwt <- read.csv("lowbwt.csv", header = TRUE)
 
 # some initial data summaries
 rs_table <- with(lowbwt,
@@ -55,6 +53,7 @@ exp(predict(fit, newdata = newdata, type = "link"))
 # so the following statement is comparing the White non-smoker
 # to the Black smoker
 exp(diff(predict(fit, newdata = newdata, type = "link")))
+#Low birth weight for a white non-smoker mom is 0.102times as likely as the black smoker mom
 
 # for probabilities, we need to use type = "response"
 predict(fit, newdata = newdata, type = "response")

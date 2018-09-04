@@ -38,3 +38,6 @@ rsconnect/
 
 # MacOS
 .DS_Store
+
+#Office Temp Docs
+~$*
