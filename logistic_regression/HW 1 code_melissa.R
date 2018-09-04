@@ -73,7 +73,7 @@ exp(confint(fit))
 
 #Remove variables with pvalues above 0.05 in "fit". Rerun logistic regression.
 # Removed were: DEPTAMT, DIRDEP, RES, BRANCH
-set.seed(1234)
+
 fit2 <- glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
             + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
             data = train_reduced, family = binomial(link = "logit"))
@@ -111,16 +111,15 @@ ggplot(gather(train_missing, key, value), aes(value)) +
 
 #Dataset with only the variables in the model
 train_model_vars <- train %>%
-  dplyr::select(INS, DDABAL, DEP, CHECKS, TELLER, SAVBAL, ATMAMT, BRANCH, CRSCORE)
+  dplyr::select(INS, DDA, DDABAL, DEP, CHECKS, TELLER, SAV, SAVBAL, ATM, ATMAMT, BRANCH)
 
 #Removing Branch from the list in order to plot histograms
 train_model_no_branch <- train %>%
-  dplyr::select(INS, DDABAL, DEP, CHECKS, TELLER, SAVBAL, ATMAMT, CRSCORE)
+  dplyr::select(INS, DDA, DDABAL, DEP, CHECKS, TELLER, SAV, SAVBAL, ATM, ATMAMT)
 
-summary(train_for_stats)
 
 #Plotting histograms of the variables selected for the model, not including Branch.
-ggplot(gather(train_for_stats, key, value), aes(value)) + geom_histogram(color = "blue") +
+ggplot(gather(train_model_no_branch, key, value), aes(value)) + geom_histogram(color = "blue") +
   facet_wrap(~ key, scales = "free") + theme_bw() +
   labs(y = "Frequncy of Each Variable", x = "Multiple Variables Defined Above", title = "Histograms for Model Variables")
 
