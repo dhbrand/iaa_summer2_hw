@@ -1,15 +1,15 @@
 library(readxl)
 library(lubridate)
 library(tidyverse)
-setwd("hw")
-excel_sheets("F-179.xlsx")
+setwd("time_series/hw_2")
+excel_sheets("../F-179.xlsx")
 # rain <- read_excel("F-179.xlsx", sheet = "Rain")
 # tide <- read_excel("F-179.xlsx", sheet = "Tide")
 
 # read only the well sheet from excel
-well <- read_excel("F-179.xlsx", sheet = "Well")
+well <- read_excel("../F-179.xlsx", sheet = "Well")
 
-well <- read_excel("F-179.xlsx", sheet = "Well", col_types = c("date", "date", "skip", "skip", "skip", "numeric"))
+#well <- read_excel("F-179.xlsx", sheet = "Well", col_types = c("date", "date", "skip", "skip", "skip", "numeric"))
 # summary(rain)
 # summary(tide)
 
@@ -21,19 +21,25 @@ hist(well$Corrected)
 
 
 # Question 1 ####
-well_2 <- well %>% 
+well %>% 
+  group_by(year(date), month(date)) %>% 
+  summarise(avg = mean(Corrected)) %>% 
+  unite(date, 1, 2, sep = "-") %>% 
+  mutate(date = zoo::as.yearmon(date))
+
++well_2 <- well %>% 
   # create a new variable which is an integer for the hour of each time
-  mutate(time_2 = hour(time)) %>% 
+  mutate(time_2 = month(time)) %>% 
   # merge the data and newly created datetime variables into a variable called datetime
   unite(datetime, date, time_2, sep = " ", remove = FALSE) %>%
   # convert the character datetime variable to an R recognized datetime format
-  mutate(datetime = ymd_h(datetime)) %>%
+  mutate(datetime = ym(datetime)) %>%
   # select only the new datetime variable and rename the Corrected variable to depth
   select(datetime, depth = Corrected) 
 
 well_3 <- well_2 %>% 
   # group by will find the smallest increment which is hour in datetime and prep for grouping functions
-  group_by(datetime) %>%
+  group_by(month()) %>%
   # you can create new variable which aggregate the values of datetime using the mean and stdev functions
   summarise(avg = mean(depth))
 
