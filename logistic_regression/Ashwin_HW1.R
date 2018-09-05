@@ -1,4 +1,3 @@
-
 library(tidyverse)
 library(haven)
 library(broom)
@@ -8,10 +7,11 @@ library(MASS)
 library(visreg)
 library(brglm)
 # read the sas dataset into an R dataframe
-train <- read_sas("C:\\Users\\thebi\\OneDrive\\Documents\\GitHub\\orange_5_hw\\logistic_regression\\insurance_t.sas7bdat")
+train <- read_sas("logistic_regression//insurance_t.sas7bdat")
 
 # look at the structure of the dataframe to see the class of each variable
 str(train)
+
 
 # create a character vector which counts all the missing values for variables
 missing <- train %>% 
@@ -91,20 +91,36 @@ ggplot(gather(train_reduced, key, value, -c(BRANCH, RES)), aes(value)) +
 
 
 #Run logistic regression with all train_reduced variables included
-fit <- glm(INS ~ DDA + DDABAL + DEP + DEPAMT + CHECKS + DIRDEP + TELLER 
-           + SAV + SAVBAL + ATM + ATMAMT + RES + BRANCH,
+fit <- glm(INS ~ DDA + DDABAL + DEP + DEPAMT + CHECKS + 
+             DIRDEP + TELLER + SAV + SAVBAL + ATM + 
+             ATMAMT + RES + BRANCH,
            data = train_reduced, family = binomial(link = "logit"))
 summary(fit)
 exp(confint(fit))
 
 #Remove variables with pvalues above 0.05 in "fit". Rerun logistic regression.
 # Removed were: DEPTAMT, DIRDEP, RES, BRANCH
+set.seed(1234)
 fit2 <- glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
             + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
             data = train_reduced, family = binomial(link = "logit"))
 summary(fit2)
+sort(abs(fit2$coefficients))
 exp(confint(fit2))
+diff(exp(fit2$coefficients))
+exp(fit2$coefficients)
 
+# Comparing the AIC for removal of columns that might seem redundant
+fit3 <- glm(INS ~ DDABAL + DEP + CHECKS + TELLER 
+            + SAVBAL + ATMAMT + BRANCH,
+            data = train_reduced, family = binomial(link = "logit"))
+summary(fit3)
+
+# adding the credit score back in because it only had 195 missing obs
+fit4 <- glm(INS ~ DDABAL + DEP + CHECKS + TELLER 
+            + SAVBAL + ATMAMT + BRANCH + CRSCORE,
+            data = cbind(train_reduced, CRSCORE = train$CRSCORE), family = binomial(link = "logit"))
+summary(fit4)
 # All variables in "fit2" model are significant. These are:
 # ATM
 # DEP: checking deposits
@@ -116,3 +132,19 @@ exp(confint(fit2))
 # DDABAL: checking balance
 # DDA: checking account
 
+
+
+# Checking distributions of variables with missing information
+train_missing <- train %>% 
+  dplyr::select(!! names(missing))
+
+
+ggplot(gather(train_missing, key, value), aes(value)) +
+  # call to the histrogram function
+  geom_histogram(color = "blue") +
+  # facet wrap creates a plot for each of the variables defined, here were using key to contain the variable 
+  # names so we say "by row" using the tilda, scales need to be free meaning let the x and y axes be scaled 
+  # according to the variable in the plot instead all the same
+  facet_wrap(~ key, scales = "free") +
+  # better looking theme
+  theme_bw()
