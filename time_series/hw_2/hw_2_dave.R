@@ -138,10 +138,54 @@ abline(v = 2018,
 #####Using a holdout data set
 well_ts_train <- ts(train$avg, start = c(2007,10), frequency = 12)
 well_ts_test <- ts(test$avg, start = c(2018,1), frequency = 12)
-hwes_well_train <- hw(well_ts_train, seasonal = "multiplicative", initial='optimal', h = 6)
-summary(hwes_well_train)
-test_results <- forecast(hwes_well_train, h=6)
 
-error <- well_ts_test - hwes_well_train$mean
-MAE <- mean(abs(error))
-MAPE <- mean(abs(error)/abs(well_ts_test))
+
+# Building a Single Exponential Smoothing Model - Well Data #
+ses_well_train <- ses(well_ts_train, initial = "optimal", h = 6)
+summary(ses_well_train)
+
+error_ses <- well_ts_test - ses_well_train$mean
+MAE <- mean(abs(error_ses)) # 0.310
+MAPE <- mean(abs(error_ses)/abs(well_ts_test)) # 0.232
+
+# Building a Linear Exponential Smoothing Model - Well Data #
+les_well_train <- holt(well_ts_train, initial = "optimal", h = 6)
+summary(les_well_train)
+
+error_les <- well_ts_test - les_well_train$mean
+MAE <- mean(abs(error_les)) # 0.310
+MAPE <- mean(abs(error_les)/abs(well_ts_test)) # 0.229
+
+# Building a Linear Exponential Smoothing Model with Damped Component - Well Data #
+ldes_well_train <- holt(well_ts_train, initial = "optimal", h = 6, damped = TRUE)
+summary(ldes_well_train)
+
+error_ldes <- well_ts_test - ldes_well_train$mean
+MAE <- mean(abs(error_ldes)) # 0.320
+MAPE <- mean(abs(error_ldes)/abs(well_ts_test)) # 0.240
+
+# testing holt winters additive model
+hwes_well_train_a <- hw(well_ts_train, seasonal = "additive", initial='optimal', h = 6)
+summary(hwes_well_train_a)
+
+error_a <- well_ts_test - hwes_well_train_a$mean
+MAE <- mean(abs(error_a)) # 0.151
+MAPE <- mean(abs(error_a)/abs(well_ts_test)) # 0.118
+
+# testing holt winters multiplicative model
+hwes_well_train_m <- hw(well_ts_train, seasonal = "multiplicative", initial='optimal', h = 6)
+summary(hwes_well_train_m)
+plot(hwes_well_train_m)
+
+error_m <- well_ts_test - hwes_well_train_m$mean
+MAE <- mean(abs(error)) # 0.116
+MAPE <- mean(abs(error)/abs(well_ts_test)) # 0.09
+
+
+#plot of predicted vs actual
+pred_actual <- bind_cols(date = as.yearmon(time(well_ts_test)), actual = as.numeric(well_ts_test), predicted = as.numeric(hwes_well_train_m$mean))
+
+ggplot(gather(pred_actual, act_pred, depth, -date), aes(date, depth, group = act_pred)) +
+  geom_point(aes(color = act_pred), size = 4) +
+  geom_line(aes(color = act_pred), size = 2) +
+  theme_bw()
