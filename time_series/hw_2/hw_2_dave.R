@@ -12,7 +12,7 @@ setwd("time_series/hw_2")
 
 # read only the well sheet from excel
 well <- read_excel("../F-179.xlsx", sheet = "Well")
-min(well$Corrected)
+
 well_2 <- well %>% 
   mutate(Corrected = Corrected + 1) %>% 
   group_by(date = as.yearmon(date)) %>% 
@@ -136,14 +136,12 @@ abline(v = 2018,
        lty = "dashed")
 
 #####Using a holdout data set
-training=subset(Passenger,end=length(Passenger)-12)
-test=subset(Passenger,start=length(Passenger)-11)
 well_ts_train <- ts(train$avg, start = c(2007,10), frequency = 12)
 well_ts_test <- ts(test$avg, start = c(2018,1), frequency = 12)
-hwes_well_train <- hw(well_ts_train, seasonal = "multiplicative", initial='optimal')
-
+hwes_well_train <- hw(well_ts_train, seasonal = "multiplicative", initial='optimal', h = 6)
+summary(hwes_well_train)
 test_results <- forecast(hwes_well_train, h=6)
 
-error <- well_ts_test - test_results$mean
+error <- well_ts_test - hwes_well_train$mean
 MAE <- mean(abs(error))
-MAPE <- mean(abs(error)/abs(test))
+MAPE <- mean(abs(error)/abs(well_ts_test))
