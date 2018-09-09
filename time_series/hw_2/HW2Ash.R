@@ -70,4 +70,25 @@ abline(v = 2018, col = "red", lty = "dashed")
 autoplot(lesWell)+
   autolayer(fitted(lesWell),series="Fitted")+ylab("Well Depth with Holt ESM Forecast")
 
+#Holt-Winters ESM
+HWwella <- hw(well_ts,seasonal="additive", h=6)
+summary(HWwella)
+HWwellm <- hw(well_ts,seasonal="multiplicative", h=6)    ##### Best model based off MAPE is Holt-Winters(mult)
+summary(HWwellm)
+plot(HWwellm,main="Well Depth with Holt-Winters Forecast")
+abline(v=2018,col="red",lty='dashed')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
