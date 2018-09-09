@@ -117,3 +117,62 @@ fit.gam<- gam(INS ~ DDA + s(DDABAL) + DEP + CHECKS + TELLER
 summary(fit.gam)
 plot(fit.gam, shade=TRUE, jit=TRUE, seWithMean = TRUE)
 
+########Simulation ##########
+# 3. difference in deviance
+d_obs<- fit2$deviance - fit.gam$deviance
+# 4. get predicted probs from the regular logistic regression glm
+# type = "response" returns the predicted probability
+phat <- predict(fit2,newdata = train_reduced, type = "response")
+# 5. generate new outcomes using the predicted probabilites from glm()
+# using the same sample size as original data
+# our logistic regression model from glm() is the "truth" now
+sim_outcome = rbinom(n = nrow(train_reduced), size=1, prob=phat)
+sim_data = data.frame(low=sim_outcome, train_reduced[,-1])
+# 6: fit glm() and gam() to this simulated data using the SAME predictor values
+# as the real data
+sim.glm = glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+              + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
+              data = sim_data, family = binomial(link = "logit"))
+sim.gam = gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+              + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
+              data = sim_data, family = binomial, method = "REML")
+# 7: take the difference in deviance between the two models on the simulated data
+d_sim <- sim.glm$deviance - sim.gam$deviance
+
+# 8: Writing a function to do steps 5-7 a bunch of times
+sim_models <- function(glm_model, gam_model){
+  if(any(class(glm_model) == "gam"))
+    stop("Error: glm_model must be fit by glm()")
+  n_obs <- nrow(glm_model$data) # sample size
+  y_name <- all.vars(glm_model$formula)[1] # get name of response
+  y_index <- match(y_name, colnames(glm_model$data)) # get index of y
+  
+  phat <- predict(glm_model, type = "response") # predicted probabilities
+  sim_data <- glm_model$data
+  # generate new response
+  sim_data[,y_index] <- rbinom(n = n_obs, size = 1, prob = phat)
+  
+  # fit glm to fake data and get deviance
+  sim_glm_dev <- glm(glm_model$formula, family = binomial(link = "logit"),
+                     data = sim_data)$deviance
+  # fit gam to fake data and get deviance
+  sim_gam_dev <- gam(gam_model$formula, family = binomial(link = "logit"), 
+                     data = sim_data, method = "REML")$deviance
+  # take the difference in deviance
+  d_sim <- sim_glm_dev - sim_gam_dev
+  return(d_sim)
+}
+
+set.seed(9418)
+d_sim <- replicate(200, sim_models(fit, fit.gam)) # do this 200 times
+paste("p-value = ", mean(d_obs <= d_sim))
+
+#plot
+hist(d_sim, breaks = 40, main = "distribution of D_sim", xlab = "D_sim")
+abline(v = d_obs, col = "red")
+
+
+
+
+
+
