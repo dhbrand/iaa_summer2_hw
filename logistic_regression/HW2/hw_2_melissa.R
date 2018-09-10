@@ -66,7 +66,7 @@ visreg(fit, "DEP", gg = TRUE, points = list(col = "black")) +
        x = "DEP", y = "partial (deviance) residuals")
 #####SAVBAL, ATMAMT not linear. DEP: a few very large values that are causing issues
 
-
+#additive model with smoothing for SAVBAL and ATMAMT
 fit.gam <- gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
                + s(SAVBAL) + ATM + s(ATMAMT) + BRANCH,
                data = train, family = binomial, method = "REML")
@@ -75,48 +75,22 @@ plot(fit.gam, ylab = "f(SAVBAL)", shade = TRUE, main = "effect of SAVBAL", jit =
 
 plot(fit.gam, ylab = "f(ATMAMT)", shade = TRUE, main = "effect of ATMAMT", jit = TRUE,seWithMean = TRUE)
 
-#interaction terms tested:
-#SAVBAL*DEP: pvalue 0.00035
-#SAVBAL*DDABAL: pvalue 2.95e-08
-#SAVBAL*CHECKS: not signif
-#SAVBAL*TELLER: not signif
-#SAVBAL*ATMAMT: 0.02
+#not sure how to interpret these plots or what to do from here with SAVBAL and ATMAMT. Remove from the model? Try
+#interaction terms/higher order terms? Not sure how to test after adding these terms if they are appropriate.
 
+#adding in squared term for SAVBAL:
+train_1 <- train %>%
+  mutate(SAVBAL_SQ=SAVBAL^2)
 
 fit_1 <- glm(INS ~ DDA + DDABAL + DEP + TELLER + CHECKS
-          + SAV + ATM + ATMAMT + BRANCH,
-           data = train, family = binomial(link = "logit"))
+          + SAV + SAVBAL + SAVBAL_SQ + ATM + ATMAMT + BRANCH,
+           data = train_1, family = binomial(link = "logit"))
 summary(fit_1)
+#AIC is lower with this term added
 
 
 
-#Re Check linearity after removing SAVBAL
-#partial residuals plots vs continuous predictors plots
-visreg(fit_1, "DDABAL", gg = TRUE, points = list(col = "black")) +
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for DDABAL",
-       x = "DDABAL", y = "partial (deviance) residuals")
 
-
-visreg(fit_1, "ATMAMT", gg = TRUE, points = list(col = "black")) +
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for ATMAMT",
-       x = "ATMAMT", y = "partial (deviance) residuals")
-
-visreg(fit_1, "TELLER", gg = TRUE, points = list(col = "black")) +
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for TELLER",
-       x = "TELLER", y = "partial (deviance) residuals")
-
-visreg(fit_1, "DEP", gg = TRUE, points = list(col = "black")) +
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for DEP",
-       x = "DEP", y = "partial (deviance) residuals")
-
-visreg(fit_1, "CHECKS", gg = TRUE, points = list(col = "black")) +
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for CHECKS",
-       x = "CHECKS", y = "partial (deviance) residuals")
 
 ### diagnostics ###
 # you can get the different types of residuals with the resid() function:
@@ -125,17 +99,17 @@ visreg(fit_1, "CHECKS", gg = TRUE, points = list(col = "black")) +
 # influence.measures() gives dfbetas, Cook's D, leverage, and all that fun stuff
 # you can also call these individually if you want
 # using functions like dfbetas(), cooks.distance(), etc.
-influence.measures(fit)
+influence.measures(fit_1)
 
 ### plot Cook's distance
-plot(fit, 4, id.n = 5) # id.n = #points identified on the plot
-##5 observations from highest Cook's D values: 1721, 4601, 5400, 1547, 4769
+plot(fit_1, 4, id.n = 5) # id.n = #points identified on the plot
+##5 observations from highest Cook's D values: 1547, 5400, 4769, 7286, 864
 
 ### dfbetas plots
 # col is coloring the outcome=1 points red and the no outcome blue
 
 # checking account balance:
-dfbetasPlots(fit, terms = "DDABAL", id.n = 5,
+dfbetasPlots(fit_1, terms = "DDABAL", id.n = 5,
              col = ifelse(fit$y == 1, "red", "blue"))
 #2221 4975 4176 6257 6739
 
@@ -143,6 +117,7 @@ dfbetasPlots(fit, terms = "DDABAL", id.n = 5,
 dfbetasPlots(fit, terms = "SAVBAL", id.n = 5,
              col = ifelse(fit$y == 1, "red", "blue"))
 #180 1935 1260 1958 5993
+
 
 # ATM amount:
 dfbetasPlots(fit, terms = "ATMAMT", id.n = 5,
