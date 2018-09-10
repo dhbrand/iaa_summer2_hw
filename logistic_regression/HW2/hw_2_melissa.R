@@ -11,9 +11,112 @@ library(car)
 train <- read_sas("C:\\Users\\Melissa Sandahl\\OneDrive\\Documents\\School\\MSA courses\\AA502\\Logistic regression\\data\\insurance_t.sas7bdat")
 
 fit <- glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
-            + SAV + SAVBAL + ATM + ATMAMT,
+            + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
             data = train, family = binomial(link = "logit"))
 summary(fit)
+
+
+#Check for any variables to transform
+#Removing Branch from the list in order to plot histograms
+train_no_branch <- train %>%
+  dplyr::select(INS, DDA, DDABAL, DEP, CHECKS, TELLER, SAV, SAVBAL, ATM, ATMAMT)
+
+
+#Plotting histograms of the variables selected for the model, not including Branch.
+ggplot(gather(train_no_branch, key, value), aes(value)) + geom_histogram(color = "blue") +
+  facet_wrap(~ key, scales = "free") + theme_bw() +
+  labs(y = "Frequncy of Each Variable", x = "Multiple Variables Defined Above", title = "Histograms for Model Variables")
+
+
+#Check separation
+#Based on coefficient estimates and standard errors, don't see separation
+
+#Check linearity
+#partial residuals plots vs continuous predictors plots
+visreg(fit, "DDABAL", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for DDABAL",
+       x = "DDABAL", y = "partial (deviance) residuals")
+
+visreg(fit, "SAVBAL", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for SAVBAL",
+       x = "SAVBAL", y = "partial (deviance) residuals")
+
+
+visreg(fit, "ATMAMT", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for ATMAMT",
+       x = "ATMAMT", y = "partial (deviance) residuals")
+
+
+visreg(fit, "CHECKS", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for CHECKS",
+       x = "CHECKS", y = "partial (deviance) residuals")
+
+visreg(fit, "TELLER", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for TELLER",
+       x = "TELLER", y = "partial (deviance) residuals")
+
+visreg(fit, "DEP", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for DEP",
+       x = "DEP", y = "partial (deviance) residuals")
+#####SAVBAL, ATMAMT not linear. DEP: a few very large values that are causing issues
+
+
+fit.gam <- gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+               + s(SAVBAL) + ATM + s(ATMAMT) + BRANCH,
+               data = train, family = binomial, method = "REML")
+summary(fit.gam)
+plot(fit.gam, ylab = "f(SAVBAL)", shade = TRUE, main = "effect of SAVBAL", jit = TRUE,seWithMean = TRUE)
+
+plot(fit.gam, ylab = "f(ATMAMT)", shade = TRUE, main = "effect of ATMAMT", jit = TRUE,seWithMean = TRUE)
+
+#interaction terms tested:
+#SAVBAL*DEP: pvalue 0.00035
+#SAVBAL*DDABAL: pvalue 2.95e-08
+#SAVBAL*CHECKS: not signif
+#SAVBAL*TELLER: not signif
+#SAVBAL*ATMAMT: 0.02
+
+
+fit_1 <- glm(INS ~ DDA + DDABAL + DEP + TELLER + CHECKS
+          + SAV + ATM + ATMAMT + BRANCH,
+           data = train, family = binomial(link = "logit"))
+summary(fit_1)
+
+
+
+#Re Check linearity after removing SAVBAL
+#partial residuals plots vs continuous predictors plots
+visreg(fit_1, "DDABAL", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for DDABAL",
+       x = "DDABAL", y = "partial (deviance) residuals")
+
+
+visreg(fit_1, "ATMAMT", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for ATMAMT",
+       x = "ATMAMT", y = "partial (deviance) residuals")
+
+visreg(fit_1, "TELLER", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for TELLER",
+       x = "TELLER", y = "partial (deviance) residuals")
+
+visreg(fit_1, "DEP", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for DEP",
+       x = "DEP", y = "partial (deviance) residuals")
+
+visreg(fit_1, "CHECKS", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for CHECKS",
+       x = "CHECKS", y = "partial (deviance) residuals")
 
 ### diagnostics ###
 # you can get the different types of residuals with the resid() function:
@@ -25,18 +128,26 @@ summary(fit)
 influence.measures(fit)
 
 ### plot Cook's distance
-plot(fit, 4, n.id = 5) # n.id = #points identified on the plot
+plot(fit, 4, id.n = 5) # id.n = #points identified on the plot
+##5 observations from highest Cook's D values: 1721, 4601, 5400, 1547, 4769
 
 ### dfbetas plots
-# age:
+# col is coloring the outcome=1 points red and the no outcome blue
+
+# checking account balance:
 dfbetasPlots(fit, terms = "DDABAL", id.n = 5,
              col = ifelse(fit$y == 1, "red", "blue"))
-# col is just me coloring the outcome points red and the no outcome blue
+#2221 4975 4176 6257 6739
 
+# savings account balance:
+dfbetasPlots(fit, terms = "SAVBAL", id.n = 5,
+             col = ifelse(fit$y == 1, "red", "blue"))
+#180 1935 1260 1958 5993
 
-
-
-
+# ATM amount:
+dfbetasPlots(fit, terms = "ATMAMT", id.n = 5,
+             col = ifelse(fit$y == 1, "red", "blue"))
+#1505 3832 7496 5400 3936
 
 
 ### partial residuals ###
