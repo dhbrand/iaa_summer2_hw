@@ -45,7 +45,7 @@ sd(well_3$avg)
 i <- seq(ymd_h("2007-10-01 01"), ymd_h("2018-06-04 10"), by = '1 hour')
 # find the difference between the new date sequence and the original unique hour values for our data
 diff <- length(i) - length(well_3$datetime)
-
+missing_dates <- distinct(tibble(missing = as.yearmon(i[!i %in% well_3$datetime])))
 # Question 3 ####
 # create a gg object using the well_3 dataframe with aesthetics: x = datetime and y = avg
 ggplot(well_3, aes(datetime, avg)) +
@@ -69,5 +69,6 @@ ggplot(well_3, aes(datetime, avg)) +
 
 
 # messing around with timeseries objects and functions
-well_ts <- ts(well_3$avg, start = c(1,1), frequency = 24*365)         decomp_stl <- stl(well_ts, s.window = 7)
+well_ts <- ts(well_3$avg, start = c(1,1), frequency = 24*365)
+decomp_stl <- stl(well_ts, s.window = 7)
 plot(decomp_stl)
