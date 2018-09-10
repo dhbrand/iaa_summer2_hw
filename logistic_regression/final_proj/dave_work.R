@@ -1,12 +1,13 @@
 library(tidyverse)
-library(brglm2)
-
+library(brglm)
+library(modelr)
+library(broom)
 con <- haven::read_sas("logistic_regression/final_proj/construction.sas7bdat")
 
 # check summary stats of numeric vars
 summ_stat <- con %>% 
   select_if(is.numeric) %>% 
-  map_df(psych::describe)
+  psych::describe()
 
 
 # convert response to binary
@@ -30,8 +31,7 @@ fit_sep <- glm(Win_Bid ~ ., data = con,
 fit_sep
 
 # using bias reduction
-fit_br <- brglm(Win_Bid ~ ., data = con, 
-               family = binomial("logit"))
+fit_br <- brglm(Win_Bid ~ ., data = con, family = binomial("logit"))
 summary(fit_br)
 
 # make training and testing data
@@ -40,7 +40,7 @@ train <- con_2 %>%
 test <- anti_join(con_2, train)
 
 # test brglm on train and predict on test
-
+set.seed(1234)
 fit_train <- brglm(Win_Bid ~ ., data = train, 
                 family = binomial("logit"))
 summary(fit_train)
@@ -56,3 +56,110 @@ pred_2 <- pred %>%
 
 # checking the accuracy of results
 MLmetrics::Accuracy(pred_2$pred, test$Win_Bid)
+
+
+# fit diagnostics
+influence.measures(fit_train)
+
+### plot Cook's distance
+plot(fit_train, 4, n.id = 5) # n.id = #points identified on the plot
+# obs 100, 431 432
+
+cd_check <- slice(train, c(100, 431:432))
+
+
+dfbetas(fit_train)
+
+
+
+# 5fold cv
+set.seed(10392)
+con_2 %>% crossv_kfold(5)
+
+fit <- brglm(Win_Bid ~ ., data=con_2)
+augment(fit) %>% select(.fitted, everything()) %>% head()
+
+
+con_2 %>%
+  crossv_kfold(5) %>%
+  mutate(model = purrr::map(train, ~brglm(Win_Bid ~ ., data=.))) -> trained.models
+trained.models
+
+map2_dbl(trained.models$model, trained.models$test, rmse) -> test.rmse
+test.rmse
+
+## Convert to data frame and plot:
+as.data.frame(test.rmse) %>% ggplot(aes(x="", y=test.rmse)) + geom_boxplot()
+
+
+map2_dbl(trained.models$model, trained.models$train, rmse) -> train.rmse
+## Convert these to **vectors** to run the test below
+as.numeric(test.rmse) -> test.rmse2
+as.numeric(train.rmse) -> train.rmse2
+
+## Run a test on train/test rmse, remembering that these are PAIRED by k-fold!
+wilcox.test(test.rmse2, train.rmse2, paired=T)
+
+trained.models %>%
+  unnest( pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
+test.predictions
+
+
+trained.models %>%
+  unnest( fitted = map2(model, test, ~augment(.x, newdata = .y)),
+          pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
+test.predictions %>% select(.id, Win_Bid, pred )
+
+test.predictions %>%
+  group_by(.id) %>%
+  summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>%
+  select(auc)
+
+
+train.predictions <- trained.models %>% unnest( fitted = map2(model, train, ~augment(.x, newdata = .y)),
+                                                pred = map2( model, train, ~predict( .x, .y, type = "response")) )
+train.predictions %>%
+  group_by(.id) %>%
+  summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
+  select(auc)
+
+
+## How to change pred column from probability to real prediction
+test.predictions %>%
+  select(.id, Win_Bid, pred ) %>%
+  mutate(pred = ifelse(pred >= 0.5, 1, 0))
+
+## Tally it all up by fold
+test.predictions %>%
+  select(.id, Win_Bid, pred ) %>%
+  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
+  group_by(.id, Win_Bid, pred) %>% 
+  tally()
+
+
+## Create a dataframe confusion matrix
+test.predictions %>%
+  select(.id, Win_Bid, pred ) %>%
+  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
+  group_by(.id, Win_Bid, pred) %>%
+  tally() %>%
+  mutate(class = ifelse(Win_Bid == pred & pred == 1, "TP",
+                        ifelse(Win_Bid != pred & pred == 1, "FP",
+                               ifelse(Win_Bid == pred & pred == 0, "TN", "FN")))) %>%
+  ungroup() %>% ### We want to ditch the `outcome` column, so remove it from grouping
+  select(.id, n, class) %>% ### Retain only columns of interest; use spread to get a column per classification type
+  spread(class, n) -> confusion
+confusion
+
+
+## Some classifer metric across all folds
+confusion %>%
+  mutate_all(funs(replace_na(.,0))) %>% 
+  group_by(.id) %>%
+  summarize(TPR = TP/(TP+FN),
+            Accuracy = (TP+TN)/(TP+TN+FP+FN),
+            PPV = TP/(TP+FP)) -> fold.metrics
+fold.metrics
+
+## Finally we can summarize:
+fold.metrics %>% summarize(meanTPR = mean(TPR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))

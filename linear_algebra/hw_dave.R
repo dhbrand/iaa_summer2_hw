@@ -38,9 +38,15 @@ sum(pcaOut$sdev[1:2]^2)/sum(pcaOut$sdev^2)
 sum(pcaOut$sdev[1:3]^2)/sum(pcaOut$sdev^2)
 
 # check  clustering
+set.seed(1234)
 clust <- kmeans(leuk[,1:5000], centers = 3)
 
 label_check <-  bind_cols(clust = clust$cluster, sample = leuk_2$sample, label = leuk_2[, 5002]) %>% 
+  arrange(clust, label)
+
+clust_2 <- kmeans(leuk[,1:5000], centers = 3)
+
+label_check_2 <-  bind_cols(clust = clust_2$cluster, sample = leuk_2$sample, label = leuk_2[, 5002]) %>% 
   arrange(clust, label)
 
 plot(label_check$clust, label_check$sample)
