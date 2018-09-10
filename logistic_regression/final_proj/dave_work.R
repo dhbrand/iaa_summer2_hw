@@ -45,11 +45,14 @@ fit_train <- brglm(Win_Bid ~ ., data = train,
                 family = binomial("logit"))
 summary(fit_train)
 
+
 pred <- predict(fit_train, newdata = test, type = "response")
 
+# get the actual prediction based on the probabilities of the predicted values
 pred_2 <- pred %>% 
   as_tibble() %>% 
   add_column(pred = rep(0, nrow(.))) %>% 
   mutate(pred = if_else(value > 0.5, 1, 0))
 
+# checking the accuracy of results
 MLmetrics::Accuracy(pred_2$pred, test$Win_Bid)
