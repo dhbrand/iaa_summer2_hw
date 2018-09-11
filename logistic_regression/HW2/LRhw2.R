@@ -49,6 +49,8 @@ train_reduced <- train_no_NAs %>%
   # drop the columns from above
   dplyr::select(-c(!! low_count_var)) 
 
+
+
 # checking the histograms of the new reduced df
 ggplot(gather(train_reduced, key, value, -c(BRANCH, RES)), aes(value)) +
   geom_histogram(color = "blue") +
@@ -85,6 +87,33 @@ diff(exp(fit2$coefficients))
 exp(fit2$coefficients)
 
 plot(fit2, 4, n.id=5)
+#Influential Obs 1721, 4601, 1547
+
+par(mfrow=c(2,4))
+dfbetasPlots(fit2, terms = "DDA", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))   #2033 3794 5727 5465 7828
+dfbetasPlots(fit2, terms = "DDABAL", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))   #147, 1848, 4975, 4176, 6739
+dfbetasPlots(fit2, terms = "DEP", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))   #1856 5465 5767 6018 8259
+dfbetasPlots(fit2, terms = "CHECKS", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))   #2467
+dfbetasPlots(fit2, terms = "TELLER", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))
+dfbetasPlots(fit2, terms = "SAV", ID.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))
+dfbetasPlots(fit2, terms = "SAVBAL", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))
+dfbetasPlots(fit2, terms = "ATM", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))   #5465
+dfbetasPlots(fit2, terms = "ATMAMT", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))
+dfbetasPlots(fit2, terms = "BRANCH", id.n = 5,
+             col = ifelse(fit2$y == 1, "red", "blue"))
+
+train_reduced[5465,]
+
+
 
 #CHECK LINEARITY
 visreg(fit2, "DDABAL", gg = TRUE, points=list(col="black")) + 
@@ -94,14 +123,14 @@ visreg(fit2, "DDABAL", gg = TRUE, points=list(col="black")) +
 
 ##### WHY do the lines cross / dont really follow each other
 visreg(fit2, "DEP", gg = TRUE, points=list(col="black")) + 
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  geom_smooth(col = "red") + theme_bw() +
   labs(title = "partial residual plot for DDBAL",
        x = "DDBAL", y = "partial (deviance) residuals")
 
 #NONLINEAR
 visreg(fit2, "SAVBAL", gg = TRUE, points=list(col="black")) + 
   geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for DDBAL",
+  labs(title = "partial residual plot for SAVBAL",
        x = "DDBAL", y = "partial (deviance) residuals")
 
 #weird towards end of graph
@@ -110,9 +139,9 @@ visreg(fit2, "ATMAMT", gg = TRUE, points=list(col="black")) +
   labs(title = "partial residual plot for DDBAL",
        x = "DDBAL", y = "partial (deviance) residuals")
 
-#GAMs to check Linearity
-fit.gam<- gam(INS ~ DDA + s(DDABAL) + DEP + CHECKS + TELLER 
-              + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
+#GAMs to check Linearity...How to know where to spline??
+fit.gam<- gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+              + SAV + s(SAVBAL) + ATM + ATMAMT + BRANCH,
               data = train_reduced, family = binomial,method = "REML")
 summary(fit.gam)
 plot(fit.gam, shade=TRUE, jit=TRUE, seWithMean = TRUE)
