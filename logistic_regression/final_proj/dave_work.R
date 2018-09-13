@@ -2,12 +2,17 @@ library(tidyverse)
 library(brglm)
 library(modelr)
 library(broom)
+library(car)
+library(mgcv)
+library(DescTools)
+
 con <- haven::read_sas("logistic_regression/final_proj/construction.sas7bdat")
 
 # check summary stats of numeric vars
 summ_stat <- con %>% 
   select_if(is.numeric) %>% 
   psych::describe()
+table(con$Win_Bid)
 
 
 # convert response to binary
@@ -15,11 +20,12 @@ con_2 <- con %>%
   modify_at("Win_Bid", as.character) %>% 
   modify_at("Win_Bid", as_factor) %>% 
   modify_at("Win_Bid", as.integer) %>% 
-  mutate( Win_Bid = if_else(Win_Bid == 1, 1, 0))
+  mutate( Win_Bid = if_else(Win_Bid == 1, 1, 0)) %>% 
+  mutate(id = row_number())
 
 
 # basic model
-fit <- glm(Win_Bid ~ ., data = con, 
+fit <- glm(Win_Bid ~ ., data = con_2, 
            family = binomial("logit"))
 
 # perfect seperation
@@ -35,10 +41,13 @@ fit_br <- brglm(Win_Bid ~ ., data = con, family = binomial("logit"))
 summary(fit_br)
 
 # make training and testing data
-train <- con_2 %>% 
+train <- con_2  %>% 
   sample_frac(.8)
-test <- anti_join(con_2, train)
-
+test <- anti_join(con_2, train, by = "id")
+train <- train %>% 
+  select(-id)
+test <- test %>% 
+  select(-id)
 # test brglm on train and predict on test
 set.seed(1234)
 fit_train <- brglm(Win_Bid ~ ., data = train, 
@@ -61,15 +70,16 @@ MLmetrics::Accuracy(pred_2$pred, test$Win_Bid)
 # fit diagnostics
 influence.measures(fit_train)
 
-### plot Cook's distance
+# Cooks distance
 plot(fit_train, 4, n.id = 5) # n.id = #points identified on the plot
 # obs 100, 431 432
 
-cd_check <- slice(train, c(100, 431:432))
+cd_check <- slice(train, c(69, 137, 241))
 
-
+# DFbetas
 dfbetas(fit_train)
-
+dfbetasPlots(fit_train, id.n = 5)
+# multiple points worth investigating further
 
 
 # 5fold cv
@@ -116,8 +126,9 @@ test.predictions %>%
   select(auc)
 
 
-train.predictions <- trained.models %>% unnest( fitted = map2(model, train, ~augment(.x, newdata = .y)),
-                                                pred = map2( model, train, ~predict( .x, .y, type = "response")) )
+train.predictions <- trained.models %>% 
+  unnest( fitted = map2(model, train, ~augment(.x, newdata = .y)),
+          pred = map2( model, train, ~predict( .x, .y, type = "response")) )
 train.predictions %>%
   group_by(.id) %>%
   summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
@@ -143,9 +154,10 @@ test.predictions %>%
   mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
   group_by(.id, Win_Bid, pred) %>%
   tally() %>%
-  mutate(class = ifelse(Win_Bid == pred & pred == 1, "TP",
-                        ifelse(Win_Bid != pred & pred == 1, "FP",
-                               ifelse(Win_Bid == pred & pred == 0, "TN", "FN")))) %>%
+  mutate(class = case_when(Win_Bid == pred & pred == 1 ~ "TP",
+                           Win_Bid != pred & pred == 1 ~ "FP",
+                           Win_Bid == pred & pred == 0 ~ "TN",
+                           TRUE ~ "FN")) %>%
   ungroup() %>% ### We want to ditch the `outcome` column, so remove it from grouping
   select(.id, n, class) %>% ### Retain only columns of interest; use spread to get a column per classification type
   spread(class, n) -> confusion
@@ -163,3 +175,22 @@ fold.metrics
 
 ## Finally we can summarize:
 fold.metrics %>% summarize(meanTPR = mean(TPR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))
+
+
+
+# looking at GAMs
+iv_string <- paste(names(train)[-1], collapse=" + ")
+gam_formula <- as.formula(Win_Bid ~ s(Estimated_Cost__Millions_) + UQ(iv_string))
+
+fit.gam <- gam(gam_formula,
+               data = train, family = binomial, method = "REML")
+summary(fit.gam)
+
+
+#more model assessment
+PseudoR2(fit_train, which = c("Cox", "Nagelkerke", "McFadden"))
+
+brier_score(fit_train)
+
+### discrimination slope = mean(p1) - mean(p0) ###
+D <- mean(fitted(fit_train)[fit_train$y == 1]) - mean(fitted(fit_train)[fit_train$y == 0])

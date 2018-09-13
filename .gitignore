@@ -41,3 +41,6 @@ rsconnect/
 
 #Office Temp Docs
 ~$*
+
+#Jupyter Notebook checkpoints
+.ipynb_*

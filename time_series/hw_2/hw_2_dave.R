@@ -171,7 +171,7 @@ hwes_well_train_m <- hw(well_ts_train, seasonal = "multiplicative", initial='opt
 summary(hwes_well_train_m)
 plot(hwes_well_train_m)
 
-error_m <- well_ts_test - hwes_well_train_m$mean
+error_m <- log(well_ts_test) - hwes_well_train_m$mean
 MAE <- mean(abs(error_m)) # 0.116
 MAPE <- mean(abs(error_m)/abs(well_ts_test)) # 0.09
 
