@@ -85,8 +85,8 @@ sort(abs(fit2$coefficients))
 exp(confint(fit2))
 diff(exp(fit2$coefficients))
 exp(fit2$coefficients)
-
-plot(fit2, 4, n.id=5)
+AIC(fit2)
+plot(fit2, 4, n.id=4)
 #Influential Obs 1721, 4601, 1547
 
 par(mfrow=c(2,4))
@@ -121,7 +121,6 @@ visreg(fit2, "DDABAL", gg = TRUE, points=list(col="black")) +
   labs(title = "partial residual plot for DDBAL",
        x = "DDBAL", y = "partial (deviance) residuals")
 
-##### WHY do the lines cross / dont really follow each other
 visreg(fit2, "DEP", gg = TRUE, points=list(col="black")) + 
   geom_smooth(col = "red") + theme_bw() +
   labs(title = "partial residual plot for DDBAL",
@@ -139,69 +138,132 @@ visreg(fit2, "ATMAMT", gg = TRUE, points=list(col="black")) +
   labs(title = "partial residual plot for DDBAL",
        x = "DDBAL", y = "partial (deviance) residuals")
 
-#GAMs to check Linearity...How to know where to spline??
+#GAM to check Linearity...Spline on nonlinear term
 fit.gam<- gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
               + SAV + s(SAVBAL) + ATM + ATMAMT + BRANCH,
               data = train_reduced, family = binomial,method = "REML")
 summary(fit.gam)
-plot(fit.gam, shade=TRUE, jit=TRUE, seWithMean = TRUE)
+AIC(fit.gam)
+plot(fit.gam, ylab = "f(SAVBAL)", shade = TRUE, main = "effect of SAVBAL", jit = TRUE,seWithMean = TRUE)
+#GAM has better AIC than fit2
 
-########Simulation ##########
-# 3. difference in deviance
-d_obs<- fit2$deviance - fit.gam$deviance
-# 4. get predicted probs from the regular logistic regression glm
-# type = "response" returns the predicted probability
-phat <- predict(fit2,newdata = train_reduced, type = "response")
-# 5. generate new outcomes using the predicted probabilites from glm()
-# using the same sample size as original data
-# our logistic regression model from glm() is the "truth" now
-sim_outcome = rbinom(n = nrow(train_reduced), size=1, prob=phat)
-sim_data = data.frame(low=sim_outcome, train_reduced[,-1])
-# 6: fit glm() and gam() to this simulated data using the SAME predictor values
-# as the real data
-sim.glm = glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
-              + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
-              data = sim_data, family = binomial(link = "logit"))
-sim.gam = gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
-              + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
-              data = sim_data, family = binomial, method = "REML")
-# 7: take the difference in deviance between the two models on the simulated data
-d_sim <- sim.glm$deviance - sim.gam$deviance
+fit3 <- glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+            + SAV + SAVBAL + ATM + ATMAMT + BRANCH + (SAVBAL*BRANCH),
+            data = train_reduced, family = binomial(link = "logit"))
+AIC(fit3)
+#interactions not improving AIC
 
-# 8: Writing a function to do steps 5-7 a bunch of times
-sim_models <- function(glm_model, gam_model){
-  if(any(class(glm_model) == "gam"))
-    stop("Error: glm_model must be fit by glm()")
-  n_obs <- nrow(glm_model$data) # sample size
-  y_name <- all.vars(glm_model$formula)[1] # get name of response
-  y_index <- match(y_name, colnames(glm_model$data)) # get index of y
+#Second smoothing term on ATMAMT bc partial residual plot looks weird
+fit.gam1<- gam(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+              + SAV + s(SAVBAL) + ATM + s(ATMAMT) + BRANCH,
+              data = train_reduced, family = binomial,method = "REML")
+summary(fit.gam)
+AIC(fit.gam1)
+plot(fit.gam1, ylab = "f(SAVBAL)", shade = TRUE, main = "effect of SAVBAL", jit = TRUE,seWithMean = TRUE)
+
+#fit.gam1 calibration curve
+obs.phat <- data.frame(y = fit.gam1$y, phat = fitted(fit.gam1))
+obs.phat <- arrange(obs.phat, phat)
+ggplot(data = obs.phat) +
+  geom_point(mapping = aes(x = phat, y = y), color = "black") +
+  geom_smooth(mapping = aes(x = phat, y = y), color = "red") +
+  geom_abline(intercept = 0, slope = 1, linetype = 2, color = "black") +
+  labs(x = "predicted probability", y = "observed frequency",
+       title = "calibration curve") +
+  scale_x_continuous(breaks = seq(0, 0.8, by = 0.1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  lims(x = c(0, 0.8), y = c(0, 1)) +
+  theme_bw()
+
+#rerun model without influential obs
+train_remove <- train[-c(1721, 1547, 4601, 5400),]
+fit_remove = glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
+                         + SAV + SAVBAL + ATM + ATMAMT + BRANCH,
+                         data = train_remove, family = binomial(link = "logit"))
+AIC(fit_remove) #AIC better than original fit model
+AIC(fit2)
+
+#CHECK LINEARITY with new model now that influential obs are taken out
+visreg(fit_remove, "DDABAL", gg = TRUE, points=list(col="black")) + 
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for DDBAL",
+       x = "DDBAL", y = "partial (deviance) residuals")
+
+visreg(fit_remove, "DEP", gg = TRUE, points=list(col="black")) + 
+  geom_smooth(col = "red") + theme_bw() +
+  labs(title = "partial residual plot for DDBAL",
+       x = "DDBAL", y = "partial (deviance) residuals")
+
+#NONLINEAR
+visreg(fit_remove, "SAVBAL", gg = TRUE, points=list(col="black")) + 
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for SAVBAL",
+       x = "DDBAL", y = "partial (deviance) residuals")
+
+#weird towards end of graph
+visreg(fit_remove, "ATMAMT", gg = TRUE, points=list(col="black")) + 
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for DDBAL",
+       x = "DDBAL", y = "partial (deviance) residuals")
+
+###########After removing influential points, all variables appear linear
+
+#Calibration curve w/ model once influential points removed
+obs.phat1 <- data.frame(y = fit_remove$y, phat = fitted(fit_remove))
+obs.phat1 <- arrange(obs.phat1, phat)
+ggplot(data = obs.phat1) +
+  geom_point(mapping = aes(x = phat, y = y), color = "black") +
+  geom_smooth(mapping = aes(x = phat, y = y), color = "red") +
+  geom_abline(intercept = 0, slope = 1, linetype = 2, color = "black") +
+  labs(x = "predicted probability", y = "observed frequency",
+       title = "calibration curve") +
+  scale_x_continuous(breaks = seq(0, 0.8, by = 0.1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  lims(x = c(0, 0.8), y = c(0, 1)) +
+  theme_bw()
+
+#BRIER SCORE
+brier_score <- function(obj, new_x = NULL, new_y = NULL){
   
-  phat <- predict(glm_model, type = "response") # predicted probabilities
-  sim_data <- glm_model$data
-  # generate new response
-  sim_data[,y_index] <- rbinom(n = n_obs, size = 1, prob = phat)
+  if(is.null(new_y)){
+    y <- obj$y
+  } else {
+    y <- new_y
+  }
   
-  # fit glm to fake data and get deviance
-  sim_glm_dev <- glm(glm_model$formula, family = binomial(link = "logit"),
-                     data = sim_data)$deviance
-  # fit gam to fake data and get deviance
-  sim_gam_dev <- gam(gam_model$formula, family = binomial(link = "logit"), 
-                     data = sim_data, method = "REML")$deviance
-  # take the difference in deviance
-  d_sim <- sim_glm_dev - sim_gam_dev
-  return(d_sim)
+  p_obs <- mean(y)
+  
+  if(any(class(obj) == "glm")){
+    if(is.null(new_x)){
+      p <- predict(obj, newdata = new_x, type = "response")
+      lp <- predict(obj, newdata = new_x, type = "link")
+    } else {
+      lp <- obj$linear
+      p <- fitted(obj)
+    }
+  } else if(is.null(obj$p)) {
+    lp <- obj$lp
+    p <- fitted(obj)
+  } else {
+    p <- obj$p
+    lp <- obj$linear
+  }
+  
+  # brier score
+  brier_score <- mean((y - p)^2)
+  
+  # max brier score is just the observed proportion
+  brier_max <- p_obs*((1 - p_obs)^2) + (1 - p_obs)*(p_obs^2)
+  
+  # scaled brier score
+  # ranges from 0 to 1---lower is better
+  brier_scaled <- brier_score/brier_max
+  # essentially, 1 - brier_scaled is the %improvement over null model
+  
+  res <- data.frame(brier_score = brier_score,
+                    brier_max = brier_max,
+                    brier_scaled = brier_scaled)
+  res
 }
 
-set.seed(9418)
-d_sim <- replicate(200, sim_models(fit, fit.gam)) # do this 200 times
-paste("p-value = ", mean(d_obs <= d_sim))
-
-#plot
-hist(d_sim, breaks = 40, main = "distribution of D_sim", xlab = "D_sim")
-abline(v = d_obs, col = "red")
-
-
-
-
-
-
+brier_score(fit_remove)
