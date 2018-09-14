@@ -1,19 +1,32 @@
-library(tidyverse)
+##############################
+#                            #
+#     MSA Class of 2019      #
+#                            #
+#    Logistic Regression:    #
+#  Model Fit & Diagnostics   #
+#                            #
+#       Matthew Austin       #
+#                            #
+##############################
+
+# need these packages #
+# (install them if you don't have them)
 library(haven)
-library(broom)
-library(MASS)
-library(visreg)
-library(brglm)
+library(tidyverse)
+#ibrary(MASS)
 library(mgcv)
+library(visreg)
 library(car)
+library(rlang)
 
-# read the sas dataset into an R dataframe
-train <- read_sas("C:\\Users\\Melissa Sandahl\\OneDrive\\Documents\\School\\MSA courses\\AA502\\Logistic regression\\data\\insurance_t.sas7bdat")
+# read in data
+data_dir <- "data/"
+input_file <- "lowbwt.csv"
+lowbwt <- read.csv(paste(data_dir, input_file, sep = ""), header = TRUE)
 
-fit <- glm(INS ~ DDA + DDABAL + DEP + CHECKS + TELLER 
-            + SAV + SAVBAL + ATM + ATMAMT,
-            data = train, family = binomial(link = "logit"))
-summary(fit)
+mod <- low ~ age + lwt + smoke + race
+fit <- glm(mod, data = lowbwt,
+           family = binomial(link = "logit"))
 
 ### diagnostics ###
 # you can get the different types of residuals with the resid() function:
@@ -29,15 +42,21 @@ plot(fit, 4, n.id = 5) # n.id = #points identified on the plot
 
 ### dfbetas plots
 # age:
-dfbetasPlots(fit, terms = "DDABAL", id.n = 5,
+dfbetasPlots(fit, terms = "age", id.n = 5,
              col = ifelse(fit$y == 1, "red", "blue"))
 # col is just me coloring the outcome points red and the no outcome blue
 
+# lwt:
+dfbetasPlots(fit, terms = "lwt", id.n = 5,
+             col = ifelse(fit$y == 1, "red", "blue"))
 
+# smoke:
+dfbetasPlots(fit, terms = "smoke", id.n = 5,
+             col = ifelse(fit$y == 1, "red", "blue"))
 
-
-
-
+# race
+dfbetasPlots(fit, terms = "race", id.n = 5,
+             col = ifelse(fit$y == 1, "red", "blue"))
 
 ### partial residuals ###
 # age:
@@ -114,10 +133,10 @@ sim_models <- function(glm_model, gam_model){
   
   # fit glm to fake data and get deviance
   sim_glm_dev <- glm(glm_model$formula, family = binomial(link = "logit"),
-                     data = sim_data)$deviance
+                        data = sim_data)$deviance
   # fit gam to fake data and get deviance
   sim_gam_dev <- gam(gam_model$formula, family = binomial(link = "logit"), 
-                     data = sim_data, method = "REML")$deviance
+                   data = sim_data, method = "REML")$deviance
   # take the difference in deviance
   d_sim <- sim_glm_dev - sim_gam_dev
   return(d_sim)

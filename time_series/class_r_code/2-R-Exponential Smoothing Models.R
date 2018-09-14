@@ -15,7 +15,7 @@ library(lmtest)
 library(ggplot2)
 
 # Saving File Locations and Uploading SAS File #
-file.dir <- "data/"
+file.dir <- "~/msa_drive/fall_1/times_series/data/"
 input.file1 <- "usairlines.sas7bdat"
 input.file2 <- "steel.sas7bdat"
 
