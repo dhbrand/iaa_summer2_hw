@@ -267,3 +267,12 @@ brier_score <- function(obj, new_x = NULL, new_y = NULL){
 }
 
 brier_score(fit_remove)
+
+# histogram of predicted probabilities by outcome
+# create data frame of outcome and predicted probabilities
+df <- data.frame(y = fit_remove$y,
+                 phat = fitted(fit_remove))
+ggplot(df, aes(phat, fill = factor(y))) +
+  geom_density(alpha = 0.2) +
+  labs(x = "predicted probability",
+       fill = "low")
