@@ -160,11 +160,21 @@ l1 <- train[1547,] # ATMAMT 96,370 / INS = 0
 l1 <- train[4601,] # SAVBAL 410,000 / INS = 0
 l1 <- train[5400,] # ATMAMT 94,645 / INS = 0
 
+train_filter <- train %>%
+  filter(SAVBAL > 50000) 
+
+ggplot(train_filter, aes(SAVBAL)) + geom_histogram()
+
+train_filter_2 <- train %>%
+  filter(ATMAMT > 10000) 
+
+ggplot(train_filter_2, aes(ATMAMT)) + geom_histogram()
+
 
 ## Removing extreme values of SAVBAL, ATMAMT from model
 train_remove <- train %>% 
-  filter(SAVBAL <= mean(SAVBAL) + 12 * sd(SAVBAL)) %>%
-  filter(ATMAMT <= mean(ATMAMT) + 12 * sd(ATMAMT))
+  mutate(SAVBAL = ifelse(SAVBAL >= 100000, 100000, SAVBAL)) %>%
+  mutate(ATMAMT = ifelse(ATMAMT >= 25000, 25000, ATMAMT))
 
 #Re-run fit_6 model with these influencers removed to see if its linear
 fit6_remove <- glm(INS ~ DDA + DDABAL + CHECKS + TELLER 
@@ -172,7 +182,7 @@ fit6_remove <- glm(INS ~ DDA + DDABAL + CHECKS + TELLER
                     data = train_remove, family = binomial(link = "logit"))
 summary(fit6_remove)
 vif(fit6_remove)
-#AIC 7623
+#AIC 7643.1
 # pvalues all still significant
 
 
@@ -230,7 +240,7 @@ fit6_int <- glm(INS ~ DDA + DDABAL + DDABAL*SAVBAL + CHECKS + TELLER
                        + SAV + SAVBAL + ATM + ATMAMT + ACCTAGE + IRA + CD + MM + MTG + CC + PHONE + INV + ILS,
                        data = train_remove, family = binomial(link = "logit"))
 summary(fit6_int)
-# AIC 7606.7
+# AIC 7629.7
 
 ##################################################################################################
 ########################## KEEPING INTERACTION TERM DDABAL*SAVBAL #################################
@@ -290,10 +300,10 @@ classif_table$youdenJ <- with(classif_table, tpr + tnr - 1)
 # find row with max
 classif_table[which.max(classif_table$youdenJ),]
 
-## threshold: where to separate the 2 classes based on predicted probability: 0.309
-# True positive rate: 0.739
-# True negative rate: 0.698
-# YoudenJ: 0.437
+## threshold: where to separate the 2 classes based on predicted probability: 0.311
+# True positive rate: 0.738
+# True negative rate: 0.700
+# YoudenJ: 0.438
 
 
 ###################################################################################################
@@ -312,10 +322,13 @@ classif_table[which.max(classif_table$youdenJ),]
 # Validation dataset
 valid <- read_sas("C:\\Users\\Melissa Sandahl\\OneDrive\\Documents\\School\\MSA courses\\AA502\\Logistic regression\\data\\insurance_v.sas7bdat")
 
-# remove extreme values
+
+# change extreme values
 valid_remove <- valid %>% 
-  filter(SAVBAL <= mean(SAVBAL) + 12 * sd(SAVBAL)) %>%
-  filter(ATMAMT <= mean(ATMAMT) + 12 * sd(ATMAMT))
+  mutate(SAVBAL = ifelse(SAVBAL >= 100000, 100000, SAVBAL)) %>%
+  mutate(ATMAMT = ifelse(ATMAMT >= 25000, 25000, ATMAMT))
+  
+  
 
 # Run validation data in fit6_int model
 pred <- predict(fit6_int, newdata = valid_remove, type = "response")
@@ -323,7 +336,7 @@ pred <- predict(fit6_int, newdata = valid_remove, type = "response")
 # Create dataframe of predicted probabilities using 0.31 threshold for predicting INS = 0 or 1. 
 pred_df <- pred %>% 
   as_tibble %>% 
-  mutate(bin = ifelse(pred >= 0.309, 1, 0))
+  mutate(bin = ifelse(pred >= 0.311, 1, 0))
 
 
 # Using cutoff of probability 0.5, coefficient of discrimination
@@ -354,6 +367,8 @@ plot(perf_v, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2)
 performance(pred_v, measure = "auc")@y.values
 
+#AUC: 0.774
+
 ### classification table ###
 classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
                             tpr = perf_v@y.values[[1]],
@@ -364,9 +379,9 @@ classif_table_v$youdenJ <- with(classif_table_v, tpr + tnr - 1)
 # find row with max
 classif_table_v[which.max(classif_table_v$youdenJ),]
 ## threshold 0.322
-## TPR: 0.755
-## TNR: 0.695
-## YoudenJ: 0.450
+## TPR: 0.759
+## TNR: 0.694
+## YoudenJ: 0.453
 
 
 
