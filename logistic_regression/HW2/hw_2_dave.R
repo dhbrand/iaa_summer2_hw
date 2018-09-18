@@ -335,8 +335,36 @@ fit_6 <- glm(INS ~ DDA + DDABAL + CHECKS + TELLER
 summary(fit_6)
 vif(fit_6)
 #AIC 7736.9
+fit_6 <- glm(INS ~ DDA + DDABAL + CHECKS + TELLER 
+             + SAV + SAVBAL + ATM + ATMAMT + ACCTAGE + IRA + CD + MM + MTG + CC + PHONE + INV + ILS,
+             data = train, family = binomial(link = "logit"))
+summary(fit_6)
+vif(fit_6)
+#AIC 7736.9
+train_nas <- train %>% 
+  drop_na(INS ,DDA ,DDABAL , CHECKS ,TELLER 
+          , SAV , SAVBAL , ATM , ATMAMT , ACCTAGE , IRA , CD , MM , MTG , CC , PHONE , INV , ILS)
+fit_6_update <- glm(INS ~ DDA + DDABAL + CHECKS + TELLER 
+                    + SAV + SAVBAL + ATM + ATMAMT + ACCTAGE + IRA + CD + MM + MTG + CC + PHONE + INV + ILS,
+                    data = train_nas, family = binomial(link = "logit"))
+summary(fit_6_update)
+train_cd <- train_nas %>% 
+  mutate(cd = cooks.distance(fit_6_update))
 
+train_rm_infobs <- train_cd %>% 
+  filter(cd < 4/(nrow(.)-ncol(.)-1))
 
+fit_6_rm_infobs <- glm(INS ~ DDA + DDABAL + CHECKS + TELLER + SAV + SAVBAL + ATM + ATMAMT + ACCTAGE + IRA + CD + MM + MTG + CC + PHONE + INV + ILS,
+                    data = train_rm_infobs, family = binomial(link = "logit"))
+summary(fit_6_rm_infobs)
+
+br_fit_6_rm_infobs <- brglm(INS ~ DDA + DDABAL + CHECKS + TELLER + SAV + SAVBAL + ATM + ATMAMT + ACCTAGE + IRA + CD + MM + MTG + CC + PHONE + INV + ILS,
+                       data = train_rm_infobs, family = binomial(link = "logit"))
+summary(br_fit_6_rm_infobs)
+
+train_rm_infobs %>% 
+  ggplot(aes(DDA)) +
+  geom_dotplot(aes(group = INS))
 
 ##### FIT6 MODEL ASSESSMENTS #############################################
 
@@ -355,37 +383,37 @@ vif(fit_6)
 #Check linearity of fit_6 continuous variables
 #partial residuals plots vs continuous predictors plots
 
-visreg(fit_6, "DDABAL", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "DDABAL", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for DDABAL",
        x = "DDABAL", y = "partial (deviance) residuals")
 
-visreg(fit_6, "SAVBAL", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "SAVBAL", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for SAVBAL",
        x = "SAVBAL", y = "partial (deviance) residuals")
 
-visreg(fit_6, "ATMAMT", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "ATMAMT", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for ATMAMT",
        x = "ATMAMT", y = "partial (deviance) residuals")
 
-visreg(fit_6, "CHECKS", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "CHECKS", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for CHECKS",
        x = "CHECKS", y = "partial (deviance) residuals")
 
-visreg(fit_6, "TELLER", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "TELLER", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for TELLER",
        x = "TELLER", y = "partial (deviance) residuals")
 
-visreg(fit_6, "ACCTAGE", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "ACCTAGE", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for ACCTAGE",
        x = "ACCTAGE", y = "partial (deviance) residuals")
 
-visreg(fit_6, "PHONE", gg = TRUE, points = list(col = "black")) +
+visreg(br_fit_6_rm_infobs, "PHONE", gg = TRUE, points = list(col = "black")) +
   geom_smooth(col = "red", fill = "red") + theme_bw() +
   labs(title = "partial residual plot for PHONE",
        x = "PHONE", y = "partial (deviance) residuals")

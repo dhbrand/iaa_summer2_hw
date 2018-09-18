@@ -1,16 +1,14 @@
 library(readxl)
 library(lubridate)
 library(tidyverse)
-
+library(tseries)
 library(forecast)
 library(lmtest)
 library(zoo)
 
 
-setwd("time_series/hw_2")
-
 # read only the well sheet from excel
-well <- read_excel("../F-179.xlsx", sheet = "Well")
+well <- read_excel("time_series/F-179.xlsx", sheet = "Well")
 
 well_2 <- well %>% 
   mutate(Corrected = Corrected + 1) %>% 
@@ -38,7 +36,7 @@ for (i in 1:3) {
   adf_out[[i]] <- adf.test(well_ts_train, "stationary", k = i)
 }
 
-nsdiffs(well_ts_train, test = "seas")
+nsdiffs(well_ts_train)
 
 well_ts_train %>% 
   diff(lag = 12) %>% 
