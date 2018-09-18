@@ -194,3 +194,5 @@ brier_score(fit_train)
 
 ### discrimination slope = mean(p1) - mean(p0) ###
 D <- mean(fitted(fit_train)[fit_train$y == 1]) - mean(fitted(fit_train)[fit_train$y == 0])
+
+
