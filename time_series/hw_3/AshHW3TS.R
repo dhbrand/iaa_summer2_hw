@@ -35,3 +35,27 @@ adf.test(well_ts_train, alternative = "stationary", k = 0)
 adf.test(well_ts_train, alternative = "stationary", k = 1)
 adf.test(well_ts_train, alternative = "stationary", k = 2)
 
+#decomposition
+decomp_stl <- stl(well_ts_train, s.window = 7)
+plot(decomp_stl)
+
+plot(well_ts_train, col = "dark gray", 
+     main = "Average Well Depth - Stationary TS", 
+     xlab = "", 
+     ylab = "Depth (in Feet)", 
+     lwd = 2)
+lines(decomp_stl$time.series[,2], 
+      col = "red", 
+      lwd = 2)
+
+#Seasonally Adjusted
+seas_well <- well_ts_train - decomp_stl$time.series[,1]
+plot(well_ts_train, 
+     col = "grey", 
+     main = "Average Well Depth - Seasonally Adjusted", 
+     xlab = "", 
+     ylab = "Depth (in Feet)", 
+     lwd = 2)
+lines(seas_well, 
+      col = "red", 
+      lwd = 2)
