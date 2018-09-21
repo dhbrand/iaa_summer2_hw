@@ -177,7 +177,7 @@ library(Hmisc)
 
 
 # read the sas dataset into an R dataframe
-test <- read_sas("logistic_regression/insurance_v.sas7bdat")
+valid <- read_sas("logistic_regression/insurance_v.sas7bdat")
 
 ###############################################################################################################
 
