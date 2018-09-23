@@ -1,13 +1,17 @@
 library(tidyverse)
-install.packages('brglm2')
 library(brglm2)
+library(brglm)
 library(modelr)
 library(broom)
 library(car)
 library(mgcv)
 library(DescTools)
 library(psych)
-install.packages('psych')
+library(visreg)
+
+library(haven)
+
+library(Hmisc)
 
 con <- haven::read_sas("C:\\Users\\Melissa Sandahl\\OneDrive\\Documents\\School\\MSA courses\\AA502\\Logistic regression\\data\\construction.sas7bdat")
 #Bid history from previous 3 years. No time information.  
@@ -87,10 +91,12 @@ fit <- glm(Win_Bid ~ ., data = con_2,
            family = binomial("logit"))
 # warning message: algorithm did not converge
 # fitted probabilities 0 or 1 occurred
-# Possibly due to Winning_Bid_Price in the model? Remove this variable! 
+# Possibly due to Winning_Bid_Price in the model? Remove this variable!
+# Other variables that would not be available when placing a bid: 
+# Number of Competitor bids
 
 con_3 <- con_2 %>%
-  dplyr::select(-Winning_Bid_Price__Millions_)
+  dplyr::select(-Winning_Bid_Price__Millions_, -Number_of_Competitor_Bids)
 
 
 # Rerun basic model:
@@ -112,7 +118,6 @@ ggplot(con_3, aes(x=Win_Bid, y=Estimated_Cost__Millions_)) + geom_jitter()
 ggplot(con_3, aes(x=Win_Bid, y=Estimated_Years_to_Complete)) + geom_jitter()
 ggplot(con_3, aes(x=Win_Bid, y=Bid_Price__Millions_)) + geom_jitter()
 ggplot(con_3, aes(x=Win_Bid, y=Sector)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Number_of_Competitor_Bids)) + geom_jitter()
 ggplot(con_3, aes(x=Win_Bid, y=Region_of_Country)) + geom_jitter()
 ggplot(con_3, aes(x=Win_Bid, y=Cost_After_Engineering_Estimate_)) + geom_jitter()
 ggplot(con_3, aes(x=Win_Bid, y=Competitor_A)) + geom_jitter()
@@ -147,68 +152,33 @@ test <- test %>%
 fit_train <- glm(Win_Bid ~ ., data = train, 
                    family = binomial("logit"))
 summary(fit_train)
-#AIC 213.71
+#AIC 250.36
 
 
-
-########### Removing variables from model. Remove cost after engineering estimate, this info is not available during bid process
-
-fit_train_2 <- glm(Win_Bid ~ Estimated_Cost__Millions_ + Estimated_Years_to_Complete + Bid_Price__Millions_ + Sector +
-                       Region_of_Country + Number_of_Competitor_Bids + Competitor_A + Competitor_B + Competitor_C + Competitor_D +
-                       Competitor_E + Competitor_F + Competitor_G + Competitor_H + Competitor_J, data = train, family = binomial("logit"))
-summary(fit_train_2)
-#AIC 211.14
-
-#check for multicollinearity
-vif(fit_train_2)
+# check for multicollinearity
+vif(fit_train)
 #estimated cost millions and bid price millions are highly correlated
 # need to remove one
 
 
-# Rmove Bid_Price__Millions_, this model should be used before setting a bid price so this should be removed anyway
-fit_train_3 <- glm(Win_Bid ~  Estimated_Cost__Millions_+ Estimated_Years_to_Complete + Sector +
-                       Region_of_Country + Number_of_Competitor_Bids + Competitor_A + Competitor_B + Competitor_C + Competitor_D +
+# Rmove Bid_Price__Millions_
+fit_train_2 <- glm(Win_Bid ~  Estimated_Cost__Millions_+ Estimated_Years_to_Complete + Sector +
+                       Region_of_Country + Competitor_A + Competitor_B + Competitor_C + Competitor_D +
                        Competitor_E + Competitor_F + Competitor_G + Competitor_H + Competitor_J, data = train, family = binomial("logit"))
-summary(fit_train_3)
-#aic 239.7
-vif(fit_train_3)
+summary(fit_train_2)
+#aic 276
+vif(fit_train_2)
+#Looks good
 
-############### Remove insignificant variables Estimated_Cost__Millions_, Estimated_Years_to_Complete, Sector, Comp A, G, D, J, Region
+
+############### Remove insignificant variables: Sector, Comp A, D, G, H,  Region, Estimated Years to complete
 
  
-fit_train_4 <- glm(Win_Bid ~  Number_of_Competitor_Bids + Competitor_B + Competitor_C + 
-                     Competitor_E + Competitor_F + Competitor_H, data = train, family = binomial("logit"))
-summary(fit_train_4)
-#AIC 235.41
-#most impactful variables: competitor C, competitor F, competitor E
-# this only leaves information about competitor bids in the model. Is this information available when making the bid???
-
-
-# what if you don't have competitor bid information?
-
-fit_train_5 <- glm(Win_Bid ~  Estimated_Cost__Millions_+ Estimated_Years_to_Complete + Sector +
-                     Region_of_Country, data = train, family = binomial("logit"))
-summary(fit_train_5)
-# in this case estimated cost and region are significant
-
-
-
-
-#################### What model to continue with??? Sector not significant with and without competitor bid information. Remove this. 
-
-fit_train_7 <- glm(Win_Bid ~  Estimated_Cost__Millions_+ Estimated_Years_to_Complete + 
-                     Region_of_Country + Number_of_Competitor_Bids + Competitor_A + Competitor_B + Competitor_C + Competitor_D +
-                     Competitor_E + Competitor_F + Competitor_G + Competitor_H + Competitor_J, data = train, family = binomial("logit"))
-summary(fit_train_7)
-#AIC 237.92
-
-
-############## STOP HERE FOR NOW #################################
-
-
-
-
-
+fit_train_3 <- glm(Win_Bid ~  Estimated_Cost__Millions_+ Competitor_B + Competitor_C +
+                     Competitor_E + Competitor_F + Competitor_J, data = train, family = binomial("logit"))
+summary(fit_train_3)
+#AIC 275.46
+#most impactful variables: Competitor C, F, E, B. Cost has very small effect. 
 
 
 
@@ -222,156 +192,152 @@ influence.measures(fit_train_3)
 
 # Cooks distance
 plot(fit_train_3, 4, n.id = 5) 
-# obs 20, 137, 327
+# obs 57, 71, 200
 # values all at 0.06 or below, very low!
+# Not concerned about influential points
 
-cd_check <- slice(train, c(20, 137, 327))
+cd_check <- slice(train, c(57, 71, 200))
  
-#20 and 327 were high bids
-# 137? 
+
 
 # DFbetas
 dfbetas(fit_train_3)
 dfbetasPlots(fit_train_3, id.n = 5)
-dfb_check <- slice(train, c(76, 80, 109, 137, 245, 307, 319, 373, 389 ))
-
-# most of these are high bids
-# 109: high years to complete
-# don't see anything problematic
+dfb_check <- slice(train, c(43 ))
 
 
-
-
-
+# Check linearity of continuous variables 
+visreg(fit_train_3, "Estimated_Cost__Millions_", gg = TRUE, points = list(col = "black")) +
+  geom_smooth(col = "red", fill = "red") + theme_bw() +
+  labs(title = "partial residual plot for Est Cost",
+       x = "Estimated_Cost__Millions_", y = "partial (deviance) residuals")
 
 
 
+
+# Check interactions
+#most impactful variables: Competitor C, F, E, B. Cost has very small effect.
+fit_int <- brglm(Win_Bid ~  Estimated_Cost__Millions_+ Competitor_B + Competitor_C +
+                     Competitor_E + Competitor_F + Competitor_J, Competitor_C*Competitor_F*Competitor_E*Competitor_B, data = train, family = binomial("logit"))
+summary(fit_int)
+#getting errors with interaction terms
+
+
+
+
+#Calibration curve
+obs.phat <- data.frame(y = fit_train_3$y, phat = fitted(fit_train_3))
+obs.phat <- arrange(obs.phat, phat)
+ggplot(data = obs.phat) +
+  geom_point(mapping = aes(x = phat, y = y), color = "black") +
+  geom_smooth(mapping = aes(x = phat, y = y), color = "red") +
+  geom_abline(intercept = 0, slope = 1, linetype = 2, color = "black") +
+  labs(x = "predicted probability", y = "observed frequency",
+       title = "calibration curve") +
+  lims(x = c(0, 0.8), y = c(0, 1)) +
+  theme_bw()
+
+# looks pretty good
+
+
+
+# Probability density 
+
+df <- data.frame(y = fit_train_3$y,
+                 phat = fitted(fit_train_3))
+ggplot(df, aes(phat, fill = factor(y))) +
+  geom_density(alpha = 0.2) +
+  labs(x = "predicted probability",
+       fill = "win")
+
+#youden's index
+pred <- prediction(fitted(fit_train_3), factor(fit_train_3$y))
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(perf, colorize = TRUE)
+abline(a = 0, b = 1, lty = 2)
+auc <- performance(pred, measure = "auc")@y.values
+auc #0.873
+
+### classification table ###
+classif_table <- data.frame(threshold = perf@alpha.values[[1]],
+                            tpr = perf@y.values[[1]],
+                            tnr = 1 - perf@x.values[[1]])
+
+# youden's index: add weights for tpr (sens) and tnr (spec), more weight towards picking up true neg
+classif_table$youdenJ <- with(classif_table, (0.35*tpr) + (0.65*tnr) - 1)
+# find row with max
+classif_table[which.max(classif_table$youdenJ),]
+
+## threshold: where to separate the 2 classes based on predicted probability: 0.291
+# True positive rate: 0.649
+# True negative rate: 0.922
+# YoudenJ: -0.174
+
+
+# discrimination slope = mean(p1) - mean(p0) ###
+mean(fitted(fit_train_3)[fit_train_3$y == 1]) - mean(fitted(fit_train_3)[fit_train_3$y == 0])
+#0.369
+
+
+#######################################################################################################
+######################################## Now Use Validation data ######################################
+#######################################################################################################
+
+#use model on validation data 
 pred <- predict(fit_train_3, newdata = test, type = "response")
 
 # get the actual prediction based on the probabilities of the predicted values
+# using threshold from youden's index
+
 pred_2 <- pred %>% 
   as_tibble() %>% 
   add_column(pred = rep(0, nrow(.))) %>% 
-  mutate(pred = if_else(value > 0.5, 1, 0))
-
-# checking the accuracy of results
-MLmetrics::Accuracy(pred_2$pred, test$Win_Bid)
+  mutate(pred = if_else(value > 0.291, 1, 0))
 
 
+# coefficient of discrimination
+mean(pred_2$value[pred_2$pred == 1]) - mean(pred_2$value[pred_2$pred == 0]) 
+#0.367
 
 
-
-# 5fold cv
-set.seed(10392)
-con_2 %>% crossv_kfold(5)
-
-fit <- brglm(Win_Bid ~ ., data=con_2)
-augment(fit) %>% select(.fitted, everything()) %>% head()
+# Brier score
+mean((test$Win_Bid - pred)^2)
+#0.074
 
 
-con_2 %>%
-  crossv_kfold(5) %>%
-  mutate(model = purrr::map(train, ~brglm(Win_Bid ~ ., data=.))) -> trained.models
-trained.models
-
-map2_dbl(trained.models$model, trained.models$test, rmse) -> test.rmse
-test.rmse
-
-## Convert to data frame and plot:
-as.data.frame(test.rmse) %>% ggplot(aes(x="", y=test.rmse)) + geom_boxplot()
-
-
-map2_dbl(trained.models$model, trained.models$train, rmse) -> train.rmse
-## Convert these to **vectors** to run the test below
-as.numeric(test.rmse) -> test.rmse2
-as.numeric(train.rmse) -> train.rmse2
-
-## Run a test on train/test rmse, remembering that these are PAIRED by k-fold!
-wilcox.test(test.rmse2, train.rmse2, paired=T)
-
-trained.models %>%
-  unnest( pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
-test.predictions
-
-
-trained.models %>%
-  unnest( fitted = map2(model, test, ~augment(.x, newdata = .y)),
-          pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
-test.predictions %>% select(.id, Win_Bid, pred )
-
-test.predictions %>%
-  group_by(.id) %>%
-  summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>%
-  select(auc)
-
-
-train.predictions <- trained.models %>% 
-  unnest( fitted = map2(model, train, ~augment(.x, newdata = .y)),
-          pred = map2( model, train, ~predict( .x, .y, type = "response")) )
-train.predictions %>%
-  group_by(.id) %>%
-  summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
-  select(auc)
-
-
-## How to change pred column from probability to real prediction
-test.predictions %>%
-  select(.id, Win_Bid, pred ) %>%
-  mutate(pred = ifelse(pred >= 0.5, 1, 0))
-
-## Tally it all up by fold
-test.predictions %>%
-  select(.id, Win_Bid, pred ) %>%
-  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
-  group_by(.id, Win_Bid, pred) %>% 
-  tally()
-
-
-## Create a dataframe confusion matrix
-test.predictions %>%
-  select(.id, Win_Bid, pred ) %>%
-  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
-  group_by(.id, Win_Bid, pred) %>%
-  tally() %>%
-  mutate(class = case_when(Win_Bid == pred & pred == 1 ~ "TP",
-                           Win_Bid != pred & pred == 1 ~ "FP",
-                           Win_Bid == pred & pred == 0 ~ "TN",
-                           TRUE ~ "FN")) %>%
-  ungroup() %>% ### We want to ditch the `outcome` column, so remove it from grouping
-  select(.id, n, class) %>% ### Retain only columns of interest; use spread to get a column per classification type
-  spread(class, n) -> confusion
-confusion
-
-
-## Some classifer metric across all folds
-confusion %>%
-  mutate_all(funs(replace_na(.,0))) %>% 
-  group_by(.id) %>%
-  summarize(TPR = TP/(TP+FN),
-            Accuracy = (TP+TN)/(TP+TN+FP+FN),
-            PPV = TP/(TP+FP)) -> fold.metrics
-fold.metrics
-
-## Finally we can summarize:
-fold.metrics %>% summarize(meanTPR = mean(TPR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))
+### c-statistic and Somers' D ###
+## interpretation: for all possible pairs of event 0 and event 1, the model assigned the 
+# higher predicted probability to the event 1 c% of the time. If just guessing c=50%
+rcorr.cens(pred, test$Win_Bid)[-c(5, 6, 9)] 
+# c-stat: 0.902
 
 
 
-# looking at GAMs
-iv_string <- paste(names(train)[-1], collapse=" + ")
-gam_formula <- as.formula(Win_Bid ~ s(Estimated_Cost__Millions_) + UQ(iv_string))
-
-fit.gam <- gam(gam_formula,
-               data = train, family = binomial, method = "REML")
-summary(fit.gam)
 
 
-#more model assessment
-PseudoR2(fit_train, which = c("Cox", "Nagelkerke", "McFadden"))
+### ROC curves ###
+pred_v <- prediction(pred, factor(test$Win_Bid))
+perf_v <- performance(pred_v, measure = "tpr", x.measure = "fpr")
+plot(perf_v, colorize = TRUE)
+abline(a = 0, b = 1, lty = 2)
+performance(pred_v, measure = "auc")@y.values
 
-brier_score(fit_train)
+#AUC: 0.902
 
-### discrimination slope = mean(p1) - mean(p0) ###
-D <- mean(fitted(fit_train)[fit_train$y == 1]) - mean(fitted(fit_train)[fit_train$y == 0])
+### classification table ###
+classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
+                              tpr = perf_v@y.values[[1]],
+                              tnr = 1 - perf_v@x.values[[1]])
+
+# youden's index: add weights for tpr (sens) and tnr (spec) if desired
+classif_table_v$youdenJ <- with(classif_table_v, (0.35*tpr) + (0.65*tnr) - 1)
+# find row with max
+classif_table_v[which.max(classif_table_v$youdenJ),]
+## threshold 0.284
+## TPR: 0.769
+## TNR: 0.938
+## YoudenJ: -0.121
+
+
 
 
