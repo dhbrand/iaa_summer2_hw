@@ -97,9 +97,11 @@ fit <- brglm(Win_Bid ~ ., data=con_2)
 augment(fit) %>% select(.fitted, everything()) %>% head()
 
 
-con_2 %>%
+train %>%
   crossv_kfold(5) %>%
-  mutate(model = purrr::map(train, ~brglm(Win_Bid ~ ., data=.))) -> trained.models
+  mutate(model = purrr::map(train, ~glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Complete  + Region_of_Country + 
+                                         Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
+                                       data = ., family = binomial("logit")))) -> trained.models
 trained.models
 
 map2_dbl(trained.models$model, trained.models$test, rmse) -> test.rmse
@@ -129,7 +131,7 @@ test.predictions %>% select(.id, Win_Bid, pred )
 
 test.predictions %>%
   group_by(.id) %>%
-  summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>%
+  summarise(auc = pROC::roc(Win_Bid, .fitted)$auc) %>%
   select(auc)
 
 
@@ -138,7 +140,7 @@ train.predictions <- trained.models %>%
           pred = map2( model, train, ~predict( .x, .y, type = "response")) )
 train.predictions %>%
   group_by(.id) %>%
-  summarize(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
+  summarise(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
   select(auc)
 
 
@@ -175,14 +177,19 @@ confusion
 confusion %>%
   mutate_all(funs(replace_na(.,0))) %>% 
   group_by(.id) %>%
-  summarize(TPR = TP/(TP+FN),
+  summarise(TPR = TP/(TP+FN),
+            TNR = TN/(TN+FP),
             Accuracy = (TP+TN)/(TP+TN+FP+FN),
             PPV = TP/(TP+FP)) -> fold.metrics
 fold.metrics
 
 ## Finally we can summarize:
-fold.metrics %>% summarize(meanTPR = mean(TPR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))
+mean_metrics <- fold.metrics %>% summarise(maxTPR = max(TPR), maxTNR = max(TNR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))
 
+# calculating youdens index
+you_j <-  mean_metrics$maxTPR + mean_metrics$maxTNR - 1
+w <- .25
+you_jw <-  2 * (w * mean_metrics$meanTPR + (1  -w) * mean_metrics$meanTNR) - 1
 
 
 # looking at GAMs
@@ -322,6 +329,12 @@ fit_train_2f <- glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Co
                       Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
                     data = train, family = binomial("logit"))
 summary(fit_train_2f)
+
+# checing var swap for multicollinearity
+fit_train_2g <- glm(Win_Bid ~  Bid_Price__Millions_ * Estimated_Years_to_Complete  + Region_of_Country + 
+                      Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
+                    data = train, family = binomial("logit"))
+summary(fit_train_2g)
 # AIC: 269.15
 
 
