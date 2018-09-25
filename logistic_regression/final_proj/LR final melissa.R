@@ -132,7 +132,10 @@ ggplot(con_2, aes(x=Win_Bid, y=Competitor_I)) + geom_jitter()
 ggplot(con_2, aes(x=Win_Bid, y=Competitor_J)) + geom_jitter()
 
 
-
+# to do it all at once
+ggplot(gather(con_3, key, value, -Win_Bid), aes(x = Win_Bid, y = value)) +
+  geom_jitter() +
+  facet_wrap(~ key, scales = "free_y")
 
 
 

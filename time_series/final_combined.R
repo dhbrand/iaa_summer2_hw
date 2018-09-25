@@ -143,7 +143,7 @@ autoplot(stationary_s, ts.colour = 'red') +
   theme_bw() +
   labs(x = "Dates from October 2008 to December 2017",
        y = "Depth of Well adjusted for Seasonal Differences(in Feet)",
-       title = "Stationarity Time Series of Well F-179 ") +
+       title = "Stationary Time Series of Well F-179 ") +
   geom_point(aes(y = as.numeric(stationary_s)), size = 0.5) +
   geom_hline(yintercept = 0, color = "grey")+
   theme(plot.title = element_text(hjust = 0.5, size = 18, face = "bold"))
