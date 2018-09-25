@@ -8,10 +8,11 @@ library(mgcv)
 library(DescTools)
 library(psych)
 library(visreg)
-
+library(ROCR)
 library(haven)
-
 library(Hmisc)
+
+
 
 con <- haven::read_sas("C:\\Users\\Melissa Sandahl\\OneDrive\\Documents\\School\\MSA courses\\AA502\\Logistic regression\\data\\construction.sas7bdat")
 #Bid history from previous 3 years. No time information.  
@@ -112,30 +113,12 @@ fit_sep
 # Separation: NO
 
 
-# Look at plots of each variable vs Win_Bid.... gotta be a better way to do this but I don't know it!
+# Look at plots of each variable vs Win_Bid
 
-ggplot(con_3, aes(x=Win_Bid, y=Estimated_Cost__Millions_)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Estimated_Years_to_Complete)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Bid_Price__Millions_)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Sector)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Region_of_Country)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Cost_After_Engineering_Estimate_)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_A)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_B)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_C)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_D)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_E)) + geom_jitter()  
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_F)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_G)) + geom_jitter()
-ggplot(con_2, aes(x=Win_Bid, y=Competitor_H)) + geom_jitter()
-ggplot(con_2, aes(x=Win_Bid, y=Competitor_I)) + geom_jitter()
-ggplot(con_2, aes(x=Win_Bid, y=Competitor_J)) + geom_jitter()
-
-
-# to do it all at once
 ggplot(gather(con_3, key, value, -Win_Bid), aes(x = Win_Bid, y = value)) +
   geom_jitter() +
   facet_wrap(~ key, scales = "free_y")
+
 
 
 
@@ -184,52 +167,109 @@ summary(fit_train_3)
 #most impactful variables: Competitor C, F, E, B. Cost has very small effect. 
 
 
+# From Dave: trying some different combinations of predictors
+fit_train_2b <- glm(Win_Bid ~  Estimated_Cost__Millions_+ Estimated_Years_to_Complete + Sector +
+                      Region_of_Country, data = train, family = binomial("logit"))
+summary(fit_train_2b)
 
+fit_train_2c <- glm(Win_Bid ~  ((Estimated_Cost__Millions_ + Sector + Estimated_Years_to_Complete) ^2 +
+                                  Region_of_Country, data = train, family = binomial("logit")))
+summary(fit_train_2c)
 
+fit_train_2d <- glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Complete  + Region_of_Country , 
+                    data = train, family = binomial("logit"))
+summary(fit_train_2d)
+
+fit_train_2e <- glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Complete  + Region_of_Country + 
+                      Competitor_A + Competitor_B + Competitor_C + Competitor_D + Competitor_E + 
+                      Competitor_F + Competitor_G + Competitor_H + Competitor_J, 
+                    data = train, family = binomial("logit"))
+summary(fit_train_2e)
+
+# making a significant competitor variable to see if it works
+train <- train %>% 
+  mutate(sig_comp = ifelse(Competitor_B==1 | Competitor_C==1 | Competitor_E==1 | Competitor_F==1 | Competitor_J==1,1,0))
+
+# best model by aic so far
+fit_train_2f <- glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Complete  + Region_of_Country + 
+                      Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
+                    data = train, family = binomial("logit"))
+summary(fit_train_2f)
+# AIC: 269.15
+
+#################### Moving forward with fit_train_2f #################################
 
 ###############################################
 # Check for influential points
 
 # fit diagnostics
-influence.measures(fit_train_3)
+influence.measures(fit_train_2f)
 
 # Cooks distance
-plot(fit_train_3, 4, n.id = 5) 
-# obs 57, 71, 200
-# values all at 0.06 or below, very low!
-# Not concerned about influential points
+plot(fit_train_2f, 4, id.n = 5) 
+# obs 200, 71, 137, 389, 87
+# values all at 0.08 or below
 
-cd_check <- slice(train, c(57, 71, 200))
+
+cd_check <- slice(train, c(200, 71, 137, 389, 87))
+# 200 has very high estimated cost
+# 71 has very low estimated cost
+# 71 137 389 87 were winning bids
+# 137 389 87 were in southwest or west region, few winning bids there
  
 
 
 # DFbetas
-dfbetas(fit_train_3)
+dfbetas(fit_train_2f)
 dfbetasPlots(fit_train_3, id.n = 5)
-dfb_check <- slice(train, c(43 ))
-
-
-# Check linearity of continuous variables 
-visreg(fit_train_3, "Estimated_Cost__Millions_", gg = TRUE, points = list(col = "black")) +
-  geom_smooth(col = "red", fill = "red") + theme_bw() +
-  labs(title = "partial residual plot for Est Cost",
-       x = "Estimated_Cost__Millions_", y = "partial (deviance) residuals")
-
+dfb_check <- slice(train, c(43, 29, 160, 311, 417))
+#43 outlier on multiple plots. This was not bid on by Comp B, E, J, all
+# three of these tend to bid on nearly everything. Unusual for a project to not
+# be bid on by any of these 3. 
+# 29, 160, 311, 417 for compC variable. Comp_C had very few bids
+# these were ones that Comp_C bid on that were winning bids for IAA
 
 
 
-# Check interactions
-#most impactful variables: Competitor C, F, E, B. Cost has very small effect.
-fit_int <- brglm(Win_Bid ~  Estimated_Cost__Millions_+ Competitor_B + Competitor_C +
-                     Competitor_E + Competitor_F + Competitor_J, Competitor_C*Competitor_F*Competitor_E*Competitor_B, data = train, family = binomial("logit"))
-summary(fit_int)
-#getting errors with interaction terms
+##################### Check linearity ######################################### 
+# Only two continuous variables in the model, used in an interaction term
+# check if interaction term is improvement over model without interaction term:
 
+
+# Model without interaction terms
+fit_train_no_int <- glm(Win_Bid ~  Estimated_Cost__Millions_ +  Estimated_Years_to_Complete  + Region_of_Country + 
+                      Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
+                    data = train, family = binomial("logit"))
+summary(fit_train_no_int)
+#AIC 274.25
+
+#ROC curves: With and without interactions
+pred <- prediction(fitted(fit_train_2f), factor(fit_train_2f$y))
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+
+pred_no_int <- prediction(fitted(fit_train_no_int), factor(fit_train_no_int$y))
+perf_no_int <- performance(pred_no_int, measure = "tpr", x.measure = "fpr")
+
+plot(perf, col = "red")
+abline(0, 1, lty = 2)
+plot(perf_no_int, col = "purple", add = TRUE)
+legend("bottomright", inset = 0.03, col = c("red", "purple"),
+       legend = c("with int", "no int"), lwd = 1)
+
+#Check BIC
+BIC(fit_train_2f)
+BIC(fit_train_no_int)
+
+#####################################################################################################
+### ROC Curves: With and without interactions look similar, slight improvement with interactions#####
+# at the highest point of the curve, and lower AIC and BIC with interactions#########################
+# will continue to use model with interactions. #####################################################
+#####################################################################################################
 
 
 
 #Calibration curve
-obs.phat <- data.frame(y = fit_train_3$y, phat = fitted(fit_train_3))
+obs.phat <- data.frame(y = fit_train_2f$y, phat = fitted(fit_train_2f))
 obs.phat <- arrange(obs.phat, phat)
 ggplot(data = obs.phat) +
   geom_point(mapping = aes(x = phat, y = y), color = "black") +
@@ -246,20 +286,23 @@ ggplot(data = obs.phat) +
 
 # Probability density 
 
-df <- data.frame(y = fit_train_3$y,
-                 phat = fitted(fit_train_3))
+df <- data.frame(y = fit_train_2f$y,
+                 phat = fitted(fit_train_2f))
 ggplot(df, aes(phat, fill = factor(y))) +
   geom_density(alpha = 0.2) +
   labs(x = "predicted probability",
        fill = "win")
 
 #youden's index
-pred <- prediction(fitted(fit_train_3), factor(fit_train_3$y))
+pred <- prediction(fitted(fit_train_2f), factor(fit_train_2f$y))
 perf <- performance(pred, measure = "tpr", x.measure = "fpr")
 plot(perf, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2)
 auc <- performance(pred, measure = "auc")@y.values
-auc #0.873
+auc #0.898
+
+
+
 
 ### classification table ###
 classif_table <- data.frame(threshold = perf@alpha.values[[1]],
@@ -271,15 +314,15 @@ classif_table$youdenJ <- with(classif_table, (0.35*tpr) + (0.65*tnr) - 1)
 # find row with max
 classif_table[which.max(classif_table$youdenJ),]
 
-## threshold: where to separate the 2 classes based on predicted probability: 0.291
-# True positive rate: 0.649
-# True negative rate: 0.922
-# YoudenJ: -0.174
+## threshold: where to separate the 2 classes based on predicted probability: 0.232
+# True positive rate: 0.797
+# True negative rate: 0.869
+# YoudenJ: -0.156
 
 
 # discrimination slope = mean(p1) - mean(p0) ###
-mean(fitted(fit_train_3)[fit_train_3$y == 1]) - mean(fitted(fit_train_3)[fit_train_3$y == 0])
-#0.369
+mean(fitted(fit_train_2f)[fit_train_2f$y == 1]) - mean(fitted(fit_train_2f)[fit_train_3$y == 0])
+#0.399
 
 
 #######################################################################################################
@@ -287,7 +330,7 @@ mean(fitted(fit_train_3)[fit_train_3$y == 1]) - mean(fitted(fit_train_3)[fit_tra
 #######################################################################################################
 
 #use model on validation data 
-pred <- predict(fit_train_3, newdata = test, type = "response")
+pred <- predict(fit_train_2f, newdata = test, type = "response")
 
 # get the actual prediction based on the probabilities of the predicted values
 # using threshold from youden's index
@@ -295,24 +338,24 @@ pred <- predict(fit_train_3, newdata = test, type = "response")
 pred_2 <- pred %>% 
   as_tibble() %>% 
   add_column(pred = rep(0, nrow(.))) %>% 
-  mutate(pred = if_else(value > 0.291, 1, 0))
+  mutate(pred = if_else(value > 0.232, 1, 0))
 
 
 # coefficient of discrimination
 mean(pred_2$value[pred_2$pred == 1]) - mean(pred_2$value[pred_2$pred == 0]) 
-#0.367
+#0.386
 
 
 # Brier score
 mean((test$Win_Bid - pred)^2)
-#0.074
+#0.065
 
 
 ### c-statistic and Somers' D ###
 ## interpretation: for all possible pairs of event 0 and event 1, the model assigned the 
 # higher predicted probability to the event 1 c% of the time. If just guessing c=50%
 rcorr.cens(pred, test$Win_Bid)[-c(5, 6, 9)] 
-# c-stat: 0.902
+# c-stat: 0.927
 
 
 
@@ -325,7 +368,7 @@ plot(perf_v, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2)
 performance(pred_v, measure = "auc")@y.values
 
-#AUC: 0.902
+#AUC: 0.927
 
 ### classification table ###
 classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
@@ -334,12 +377,12 @@ classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
 
 # youden's index: add weights for tpr (sens) and tnr (spec) if desired
 classif_table_v$youdenJ <- with(classif_table_v, (0.35*tpr) + (0.65*tnr) - 1)
-# find row with max
-classif_table_v[which.max(classif_table_v$youdenJ),]
-## threshold 0.284
+## Find Validation Data TPR, TNR: Use 0.232 threshold??? Closest is 0.211
+classif_table_v[20,]
+
 ## TPR: 0.769
-## TNR: 0.938
-## YoudenJ: -0.121
+## TNR: 0.906
+## YoudenJ: -0.142
 
 
 
