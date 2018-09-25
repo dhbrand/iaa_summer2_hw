@@ -232,7 +232,7 @@ summary(fit_int1)
 
 
 #Calibration curve
-obs.phat <- data.frame(y = fit_train_3$y, phat = fitted(fit_train_3))
+obs.phat <- data.frame(y = fit_train_4$y, phat = fitted(fit_train_4))
 obs.phat <- arrange(obs.phat, phat)
 ggplot(data = obs.phat) +
   geom_point(mapping = aes(x = phat, y = y), color = "black") +
@@ -249,20 +249,20 @@ ggplot(data = obs.phat) +
 
 # Probability density 
 
-df <- data.frame(y = fit_train_3$y,
-                 phat = fitted(fit_train_3))
+df <- data.frame(y = fit_train_4$y,
+                 phat = fitted(fit_train_4))
 ggplot(df, aes(phat, fill = factor(y))) +
   geom_density(alpha = 0.2) +
   labs(x = "predicted probability",
        fill = "win")
 
 #youden's index
-pred <- prediction(fitted(fit_train_3), factor(fit_train_3$y))
+pred <- prediction(fitted(fit_train_4), factor(fit_train_4$y))
 perf <- performance(pred, measure = "tpr", x.measure = "fpr")
 plot(perf, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2)
 auc <- performance(pred, measure = "auc")@y.values
-auc #0.873
+auc #0.880
 
 ### classification table ###
 classif_table <- data.frame(threshold = perf@alpha.values[[1]],
@@ -274,15 +274,15 @@ classif_table$youdenJ <- with(classif_table, (0.35*tpr) + (0.65*tnr) - 1)
 # find row with max
 classif_table[which.max(classif_table$youdenJ),]
 
-## threshold: where to separate the 2 classes based on predicted probability: 0.291
-# True positive rate: 0.649
-# True negative rate: 0.922
-# YoudenJ: -0.174
+## threshold: where to separate the 2 classes based on predicted probability: 0.233
+# True positive rate: 0.716
+# True negative rate: 0.889
+# YoudenJ: -0.172
 
 
 # discrimination slope = mean(p1) - mean(p0) ###
-mean(fitted(fit_train_3)[fit_train_3$y == 1]) - mean(fitted(fit_train_3)[fit_train_3$y == 0])
-#0.369
+mean(fitted(fit_train_4)[fit_train_4$y == 1]) - mean(fitted(fit_train_4)[fit_train_4$y == 0])
+#0.373
 
 
 #######################################################################################################
@@ -290,7 +290,7 @@ mean(fitted(fit_train_3)[fit_train_3$y == 1]) - mean(fitted(fit_train_3)[fit_tra
 #######################################################################################################
 
 #use model on validation data 
-pred <- predict(fit_train_3, newdata = test, type = "response")
+pred <- predict(fit_train_4, newdata = test, type = "response")
 
 # get the actual prediction based on the probabilities of the predicted values
 # using threshold from youden's index
@@ -303,19 +303,19 @@ pred_2 <- pred %>%
 
 # coefficient of discrimination
 mean(pred_2$value[pred_2$pred == 1]) - mean(pred_2$value[pred_2$pred == 0]) 
-#0.367
+#0.369
 
 
 # Brier score
 mean((test$Win_Bid - pred)^2)
-#0.074
+#0.073
 
 
 ### c-statistic and Somers' D ###
 ## interpretation: for all possible pairs of event 0 and event 1, the model assigned the 
 # higher predicted probability to the event 1 c% of the time. If just guessing c=50%
 rcorr.cens(pred, test$Win_Bid)[-c(5, 6, 9)] 
-# c-stat: 0.902
+# c-stat: 0.914
 
 
 
@@ -328,7 +328,7 @@ plot(perf_v, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2)
 performance(pred_v, measure = "auc")@y.values
 
-#AUC: 0.902
+#AUC: 0.914
 
 ### classification table ###
 classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
@@ -339,10 +339,10 @@ classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
 classif_table_v$youdenJ <- with(classif_table_v, (0.35*tpr) + (0.65*tnr) - 1)
 # find row with max
 classif_table_v[which.max(classif_table_v$youdenJ),]
-## threshold 0.284
-## TPR: 0.769
-## TNR: 0.938
-## YoudenJ: -0.121
+## threshold 0.295
+## TPR: 0.846
+## TNR: 0.906
+## YoudenJ: -0.115
 
 
 
