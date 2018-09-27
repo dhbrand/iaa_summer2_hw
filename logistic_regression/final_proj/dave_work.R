@@ -290,7 +290,9 @@ brier_max <- mean((test$Win_Bid - mean(test$Win_Bid))^2)
 
 # scaled brier score
 # this is basically the %improvement over null/intercept-only model
-brier_scaled <- 1 - (brier_score/brier_max)
+brier_scaled <- brier_score/brier_max
+improv<- 1 - brier_scaled
+
 
 ### c-statistic and Somers' D ###
 ## interpretation: for all possible pairs of event 0 and event 1, the model assigned the 
