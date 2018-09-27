@@ -47,171 +47,6 @@ fit_sep
 fit_br <- brglm(Win_Bid ~ ., data = con, family = binomial("logit"))
 summary(fit_br)
 
-# make training and testing data
-train <- con_2  %>% 
-  sample_frac(.8)
-test <- anti_join(con_2, train, by = "id")
-train <- train %>% 
-  select(-id)
-test <- test %>% 
-  select(-id)
-# test brglm on train and predict on test
-set.seed(1234)
-fit_train <- brglm(Win_Bid ~ ., data = train, 
-                family = binomial("logit"))
-summary(fit_train)
-
-
-pred <- predict(fit_train, newdata = test, type = "response")
-
-# get the actual prediction based on the probabilities of the predicted values
-pred_2 <- pred %>% 
-  as_tibble() %>% 
-  add_column(pred = rep(0, nrow(.))) %>% 
-  mutate(pred = if_else(value > 0.5, 1, 0))
-
-# checking the accuracy of results
-MLmetrics::Accuracy(pred_2$pred, test$Win_Bid)
-
-
-# fit diagnostics
-influence.measures(fit_train)
-
-# Cooks distance
-plot(fit_train, 4, n.id = 5) # n.id = #points identified on the plot
-# obs 100, 431 432
-
-cd_check <- slice(train, c(69, 137, 241))
-
-# DFbetas
-dfbetas(fit_train)
-dfbetasPlots(fit_train, id.n = 5)
-# multiple points worth investigating further
-
-
-# 5fold cv
-set.seed(10392)
-con_2 %>% crossv_kfold(5)
-
-fit <- brglm(Win_Bid ~ ., data=con_2)
-augment(fit) %>% select(.fitted, everything()) %>% head()
-
-
-train %>%
-  crossv_kfold(5) %>%
-  mutate(model = purrr::map(train, ~glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Complete  + Region_of_Country + 
-                                         Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
-                                       data = ., family = binomial("logit")))) -> trained.models
-trained.models
-
-map2_dbl(trained.models$model, trained.models$test, rmse) -> test.rmse
-test.rmse
-
-## Convert to data frame and plot:
-as.data.frame(test.rmse) %>% ggplot(aes(x="", y=test.rmse)) + geom_boxplot()
-
-
-map2_dbl(trained.models$model, trained.models$train, rmse) -> train.rmse
-## Convert these to **vectors** to run the test below
-as.numeric(test.rmse) -> test.rmse2
-as.numeric(train.rmse) -> train.rmse2
-
-## Run a test on train/test rmse, remembering that these are PAIRED by k-fold!
-wilcox.test(test.rmse2, train.rmse2, paired=T)
-
-trained.models %>%
-  unnest( pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
-test.predictions
-
-
-trained.models %>%
-  unnest( fitted = map2(model, test, ~augment(.x, newdata = .y)),
-          pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
-test.predictions %>% select(.id, Win_Bid, pred )
-
-test.predictions %>%
-  group_by(.id) %>%
-  summarise(auc = pROC::roc(Win_Bid, .fitted)$auc) %>%
-  select(auc)
-
-
-train.predictions <- trained.models %>% 
-  unnest( fitted = map2(model, train, ~augment(.x, newdata = .y)),
-          pred = map2( model, train, ~predict( .x, .y, type = "response")) )
-train.predictions %>%
-  group_by(.id) %>%
-  summarise(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
-  select(auc)
-
-
-## How to change pred column from probability to real prediction
-test.predictions %>%
-  select(.id, Win_Bid, pred ) %>%
-  mutate(pred = ifelse(pred >= 0.5, 1, 0))
-
-## Tally it all up by fold
-test.predictions %>%
-  select(.id, Win_Bid, pred ) %>%
-  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
-  group_by(.id, Win_Bid, pred) %>% 
-  tally()
-
-
-## Create a dataframe confusion matrix
-test.predictions %>%
-  select(.id, Win_Bid, pred ) %>%
-  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
-  group_by(.id, Win_Bid, pred) %>%
-  tally() %>%
-  mutate(class = case_when(Win_Bid == pred & pred == 1 ~ "TP",
-                           Win_Bid != pred & pred == 1 ~ "FP",
-                           Win_Bid == pred & pred == 0 ~ "TN",
-                           TRUE ~ "FN")) %>%
-  ungroup() %>% ### We want to ditch the `outcome` column, so remove it from grouping
-  select(.id, n, class) %>% ### Retain only columns of interest; use spread to get a column per classification type
-  spread(class, n) -> confusion
-confusion
-
-
-## Some classifer metric across all folds
-confusion %>%
-  mutate_all(funs(replace_na(.,0))) %>% 
-  group_by(.id) %>%
-  summarise(TPR = TP/(TP+FN),
-            TNR = TN/(TN+FP),
-            Accuracy = (TP+TN)/(TP+TN+FP+FN),
-            PPV = TP/(TP+FP)) -> fold.metrics
-fold.metrics
-
-## Finally we can summarize:
-mean_metrics <- fold.metrics %>% summarise(maxTPR = max(TPR), maxTNR = max(TNR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))
-
-# calculating youdens index
-you_j <-  mean_metrics$maxTPR + mean_metrics$maxTNR - 1
-w <- .25
-you_jw <-  2 * (w * mean_metrics$meanTPR + (1  -w) * mean_metrics$meanTNR) - 1
-
-
-# looking at GAMs
-iv_string <- paste(names(train)[-1], collapse=" + ")
-gam_formula <- as.formula(Win_Bid ~ s(Estimated_Cost__Millions_) + UQ(iv_string))
-
-fit.gam <- gam(gam_formula,
-               data = train, family = binomial, method = "REML")
-summary(fit.gam)
-
-
-#more model assessment
-PseudoR2(fit_train, which = c("Cox", "Nagelkerke", "McFadden"))
-
-brier_score(fit_train)
-
-### discrimination slope = mean(p1) - mean(p0) ###
-D <- mean(fitted(fit_train)[fit_train$y == 1]) - mean(fitted(fit_train)[fit_train$y == 0])
-
-
-
-# from melissa
 
 # basic model
 fit <- glm(Win_Bid ~ ., data = con_2, 
@@ -229,6 +64,8 @@ con_3 <- con_2 %>%
 # Rerun basic model:
 fit_2 <- glm(Win_Bid ~ ., data = con_3, 
              family = binomial("logit"))
+fit_2_train <- glm(Win_Bid ~ ., data = train, 
+             family = binomial("logit"))
 # no warning message
 
 # check separation again. 
@@ -241,25 +78,6 @@ fit_sep
 
 # Look at plots of each variable vs Win_Bid.... gotta be a better way to do this but I don't know it!
 
-ggplot(con_3, aes(x=Win_Bid, y=Estimated_Cost__Millions_)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Estimated_Years_to_Complete)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Bid_Price__Millions_)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Sector)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Region_of_Country)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Cost_After_Engineering_Estimate_)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_A)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_B)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_C)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_D)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_E)) + geom_jitter()  
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_F)) + geom_jitter()
-ggplot(con_3, aes(x=Win_Bid, y=Competitor_G)) + geom_jitter()
-ggplot(con_2, aes(x=Win_Bid, y=Competitor_H)) + geom_jitter()
-ggplot(con_2, aes(x=Win_Bid, y=Competitor_I)) + geom_jitter()
-ggplot(con_2, aes(x=Win_Bid, y=Competitor_J)) + geom_jitter()
-
-
-# to do it all at once
 ggplot(gather(con_3, key, value, -Win_Bid), aes(x = Win_Bid, y = value)) +
   geom_jitter() +
   facet_wrap(~ key, scales = "free_y")
@@ -465,9 +283,14 @@ mean(pred_2$value[pred_2$pred == 1]) - mean(pred_2$value[pred_2$pred == 0])
 
 
 # Brier score
-mean((test$Win_Bid - pred)^2)
+brier_score <- mean((test$Win_Bid - pred)^2)
 #0.0651423
 
+brier_max <- mean((test$Win_Bid - mean(test$Win_Bid))^2)
+
+# scaled brier score
+# this is basically the %improvement over null/intercept-only model
+brier_scaled <- 1 - (brier_score/brier_max)
 
 ### c-statistic and Somers' D ###
 ## interpretation: for all possible pairs of event 0 and event 1, the model assigned the 
@@ -496,10 +319,281 @@ classif_table_v <- data.frame(threshold = perf_v@alpha.values[[1]],
 # youden's index: add weights for tpr (sens) and tnr (spec) if desired
 classif_table_v$youdenJ <- with(classif_table_v, (0.35*tpr) + (0.65*tnr) - 1)
 # find row with max
-classif_table_v[which.max(classif_table_v$youdenJ),]
+classif_table_v[which(classif_table_v$youdenJ >= -0.1558071),]
 ## threshold 0.2676357
 ## TPR: 0.8461538
 ## TNR: 0.8958333
 ## YoudenJ: -0.1215545
 
+### compute a bunch of stuff ###
+fitstat <- function(obj, new_x = NULL, new_y = NULL){
+  # this function computes a bunch of fitstats.
+  #
+  # inputs:
+  # 1. obj: a data frame or a model object from glm() or gam()
+  #         the data frame must have a vector of responses "y" AND a vector of
+  #         either probabilities "p" or linear predictor "lp"
+  #         (linear predictors are obtained with predict(..., type = "link"))
+  # 2. new_x: specify new dataset to get predictions for new obs. if NULL,
+  #           results will be computed using original obj data
+  # 3. new_y: use new responses. if NULL, results will be computed using 
+  #           original obj data
+  #
+  # output: a list of two elements
+  #   1. fitstats = coefficient of discrimination, raw/max/scaled brier scores,
+  #      c-statistic, Somers' D, stdev of c/Somers, Nagelkerke R^2
+  #   2. est = a data frame with y (new_y), p (predicted probabilities for
+  #      new_y), and lp (predicted linear predictor for new_y). these will be
+  #      same as those in obj if no new data is given
+  
+  # check structure
+  if(is.null(obj$y)){
+    stop("obj must be a model object or a data frame with arguments y and either
+         p or lp")
+  }
+  
+  # if no new data given, use old response
+  if(is.null(new_y)){
+    new_y <- obj$y
+  }
+  
+  # get predicted probabilities and linear predictors for data
+  if(any(class(obj) == "glm")){
+    # predict from model object
+    p_hat <- predict(obj, newdata = new_x, type = "response")
+    lp <- predict(obj, newdata = new_x, type = "link")
+  } else if(is.null(obj$lp)){
+    # predict from data frame
+    p_hat <- obj$p
+    lp <- qlogis(p_hat)
+  } else {
+    lp <- obj$lp
+    p_hat <- plogis(lp)
+  }
+  
+  # remove missing values
+  new_y <- new_y[!is.na(p_hat)]
+  p_hat <- p_hat[!is.na(p_hat)]
+  lp <- lp[!is.na(p_hat)]
+  
+  ### compute coefficient of discrimination ###
+  # D = 0.5(r2res + r2mod), where r2res = 1 - (brier/brier_max), and
+  # r2mod = sum(((p_hat - p_obs)^2))/sum(((new_y - p_obs)^2))
+  p1 <- p_hat[new_y == 1]
+  p0 <- p_hat[new_y == 0]
+  coef_discrim <- mean(p1) - mean(p0)
+  
+  ### compute [scaled] brier score ###
+  # raw brier score
+  brier_score <- mean((new_y - p_hat)^2)
+  
+  # max brier score is just the observed proportion
+  # brier_max <- p_obs*((1 - p_obs)^2) + (1 - p_obs)*(p_obs^2)
+  brier_max <- mean((new_y - mean(new_y))^2)
+  
+  # scaled brier score
+  # this is basically the %improvement over null/intercept-only model
+  brier_scaled <- 1 - (brier_score/brier_max)
+  
+  ### compute c-statistic/Somers' Dxy ###
+  rank_stats <- as.numeric(Hmisc::rcorr.cens(p_hat, new_y))
+  somers <- rank_stats[2] # Somers' D
+  c_stat <- rank_stats[1] # c-statistic
+  rankSD <- rank_stats[3] # standard deviation for c & somers'
+  
+  ### compute nagelkerke r2 ###
+  # like scaled brier score, indicates %improvement over null model
+  p_obs <- mean(new_y) # mean/observed proportion of data
+  mod_dev <- -2*sum(new_y*lp - log(1 + exp(lp))) # model deviance
+  nullmod_int <- qlogis(p_obs) # intercept for null model
+  null_dev <- -2*sum(new_y*nullmod_int - log(1 + exp(nullmod_int))) # null dev
+  LRstat <- null_dev - mod_dev # likelihood ratio statistic
+  n_obs <- length(new_y) # sample size
+  R2nagelkerke <- (1 - exp(-LRstat/n_obs))/(1 - exp(-null_dev/n_obs))
+  
+  fitstats <- data.frame(coef_discrim = coef_discrim,
+                         brier_score = brier_score,
+                         brier_max = brier_max,
+                         brier_scaled = brier_scaled,
+                         somers = somers,
+                         c_stat = c_stat,
+                         rankSD = rankSD,
+                         R2nagelkerke = R2nagelkerke)
+  
+  predictions <- data.frame(y = new_y,
+                            p = p_hat,
+                            lp = lp)
+  
+  res <- list("fitstats" = fitstats,
+              "est" = predictions)
+  return(res)
+  }
 
+
+
+
+# playing with 5fold cv
+# make training and testing data
+train <- con_2  %>% 
+  sample_frac(.8)
+test <- anti_join(con_2, train, by = "id")
+train <- train %>% 
+  select(-id)
+test <- test %>% 
+  select(-id)
+# test brglm on train and predict on test
+set.seed(1234)
+fit_train <- brglm(Win_Bid ~ ., data = train, 
+                   family = binomial("logit"))
+summary(fit_train)
+
+
+pred <- predict(fit_train, newdata = test, type = "response")
+
+# get the actual prediction based on the probabilities of the predicted values
+pred_2 <- pred %>% 
+  as_tibble() %>% 
+  add_column(pred = rep(0, nrow(.))) %>% 
+  mutate(pred = if_else(value > 0.5, 1, 0))
+
+# checking the accuracy of results
+MLmetrics::Accuracy(pred_2$pred, test$Win_Bid)
+
+
+# fit diagnostics
+influence.measures(fit_train)
+
+# Cooks distance
+plot(fit_train, 4, n.id = 5) # n.id = #points identified on the plot
+# obs 100, 431 432
+
+cd_check <- slice(train, c(69, 137, 241))
+
+# DFbetas
+dfbetas(fit_train)
+dfbetasPlots(fit_train, id.n = 5)
+# multiple points worth investigating further
+
+
+# 5fold cv
+set.seed(10392)
+con_2 %>% crossv_kfold(5)
+
+fit <- brglm(Win_Bid ~ ., data=con_2)
+augment(fit) %>% select(.fitted, everything()) %>% head()
+
+
+train %>%
+  crossv_kfold(5) %>%
+  mutate(model = purrr::map(train, ~glm(Win_Bid ~  Estimated_Cost__Millions_ * Estimated_Years_to_Complete  + Region_of_Country + 
+                                          Competitor_B + Competitor_C + Competitor_E + Competitor_F + Competitor_J, 
+                                        data = ., family = binomial("logit")))) -> trained.models
+trained.models
+
+map2_dbl(trained.models$model, trained.models$test, rmse) -> test.rmse
+test.rmse
+
+## Convert to data frame and plot:
+as.data.frame(test.rmse) %>% ggplot(aes(x="", y=test.rmse)) + geom_boxplot()
+
+
+map2_dbl(trained.models$model, trained.models$train, rmse) -> train.rmse
+## Convert these to **vectors** to run the test below
+as.numeric(test.rmse) -> test.rmse2
+as.numeric(train.rmse) -> train.rmse2
+
+## Run a test on train/test rmse, remembering that these are PAIRED by k-fold!
+wilcox.test(test.rmse2, train.rmse2, paired=T)
+
+trained.models %>%
+  unnest( pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
+test.predictions
+
+
+trained.models %>%
+  unnest( fitted = map2(model, test, ~augment(.x, newdata = .y)),
+          pred = map2( model, test, ~predict( .x, .y, type = "response")) ) -> test.predictions
+test.predictions %>% select(.id, Win_Bid, pred )
+
+test.predictions %>%
+  group_by(.id) %>%
+  summarise(auc = pROC::roc(Win_Bid, .fitted)$auc) %>%
+  select(auc)
+
+
+train.predictions <- trained.models %>% 
+  unnest( fitted = map2(model, train, ~augment(.x, newdata = .y)),
+          pred = map2( model, train, ~predict( .x, .y, type = "response")) )
+train.predictions %>%
+  group_by(.id) %>%
+  summarise(auc = pROC::roc(Win_Bid, .fitted)$auc) %>% ### outcome from the true data, .fitted from augment's output. Run roc() on these columns and pull out $auc!
+  select(auc)
+
+
+## How to change pred column from probability to real prediction
+test.predictions %>%
+  select(.id, Win_Bid, pred ) %>%
+  mutate(pred = ifelse(pred >= 0.5, 1, 0))
+
+## Tally it all up by fold
+test.predictions %>%
+  select(.id, Win_Bid, pred ) %>%
+  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
+  group_by(.id, Win_Bid, pred) %>% 
+  tally()
+
+
+## Create a dataframe confusion matrix
+test.predictions %>%
+  select(.id, Win_Bid, pred ) %>%
+  mutate(pred = ifelse(pred >= 0.5, 1, 0)) %>%
+  group_by(.id, Win_Bid, pred) %>%
+  tally() %>%
+  mutate(class = case_when(Win_Bid == pred & pred == 1 ~ "TP",
+                           Win_Bid != pred & pred == 1 ~ "FP",
+                           Win_Bid == pred & pred == 0 ~ "TN",
+                           TRUE ~ "FN")) %>%
+  ungroup() %>% ### We want to ditch the `outcome` column, so remove it from grouping
+  select(.id, n, class) %>% ### Retain only columns of interest; use spread to get a column per classification type
+  spread(class, n) -> confusion
+confusion
+
+
+## Some classifer metric across all folds
+confusion %>%
+  mutate_all(funs(replace_na(.,0))) %>% 
+  group_by(.id) %>%
+  summarise(TPR = TP/(TP+FN),
+            TNR = TN/(TN+FP),
+            Accuracy = (TP+TN)/(TP+TN+FP+FN),
+            PPV = TP/(TP+FP)) -> fold.metrics
+fold.metrics
+
+## Finally we can summarize:
+mean_metrics <- fold.metrics %>% summarise(maxTPR = max(TPR), maxTNR = max(TNR), meanAcc = mean(Accuracy), meanPPV=mean(PPV))
+
+# calculating youdens index
+you_j <-  mean_metrics$maxTPR + mean_metrics$maxTNR - 1
+w <- .25
+you_jw <-  2 * (w * mean_metrics$meanTPR + (1  -w) * mean_metrics$meanTNR) - 1
+
+
+# looking at GAMs
+iv_string <- paste(names(train)[-1], collapse=" + ")
+gam_formula <- as.formula(Win_Bid ~ s(Estimated_Cost__Millions_) + UQ(iv_string))
+
+fit.gam <- gam(gam_formula,
+               data = train, family = binomial, method = "REML")
+summary(fit.gam)
+
+
+#more model assessment
+PseudoR2(fit_train, which = c("Cox", "Nagelkerke", "McFadden"))
+
+brier_score(fit_train)
+
+### discrimination slope = mean(p1) - mean(p0) ###
+D <- mean(fitted(fit_train)[fit_train$y == 1]) - mean(fitted(fit_train)[fit_train$y == 0])
+
+
+MLmetrics::Accuracy(pred, test$Win_Bid)
