@@ -323,9 +323,9 @@ classif_table_v$youdenJ <- with(classif_table_v, (0.35*tpr) + (0.65*tnr) - 1)
 # find row with max
 classif_table_v[which(classif_table_v$youdenJ >= -0.1558071),]
 ## threshold 0.2676357
-## TPR: 0.8461538
-## TNR: 0.8958333
-## YoudenJ: -0.1215545
+## TPR: 0.9230769
+## TNR: 0.8020833
+## YoudenJ: -0.1558071 from the highest max training class table
 
 ### compute a bunch of stuff ###
 fitstat <- function(obj, new_x = NULL, new_y = NULL){
