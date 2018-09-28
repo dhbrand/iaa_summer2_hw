@@ -309,8 +309,8 @@ pred_v <- prediction(pred, factor(test$Win_Bid))
 perf_v <- performance(pred_v, measure = "tpr", x.measure = "fpr")
 plot(perf_v, colorize = TRUE)
 abline(a = 0, b = 1, lty = 2)
-performance(pred_v, measure = "auc")@y.values
-
+auc <- performance(pred_v, measure = "auc")@y.values
+auc
 #AUC: 0.9270833
 
 ### classification table ###
@@ -432,7 +432,7 @@ fitstat <- function(obj, new_x = NULL, new_y = NULL){
   }
 
 
-
+fitstat(fit_train_2f, new_y = test$Win_Bid)
 
 # playing with 5fold cv
 # make training and testing data
