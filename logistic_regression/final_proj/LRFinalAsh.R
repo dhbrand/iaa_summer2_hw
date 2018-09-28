@@ -335,7 +335,7 @@ mean(fitted(fit_train_2f)[fit_train_2f$y == 1]) - mean(fitted(fit_train_2f)[fit_
 
 #use model on validation data 
 pred <- predict(fit_train_2f, newdata = test, type = "response")
-
+test$pred <- pred
 # get the actual prediction based on the probabilities of the predicted values
 # using threshold from youden's index
 
@@ -349,6 +349,17 @@ pred_2 <- pred %>%
 mean(pred_2$value[pred_2$pred == 1]) - mean(pred_2$value[pred_2$pred == 0]) 
 #0.386
 
+#Calibration curve
+obs.phat <- data.frame(y = test$Win_Bid, phat = test$pred)
+obs.phat <- arrange(obs.phat, phat)
+ggplot(data = obs.phat) +
+  geom_point(mapping = aes(x = phat, y = y), color = "black") +
+  geom_smooth(mapping = aes(x = phat, y = y), color = "red") +
+  geom_abline(intercept = 0, slope = 1, linetype = 2, color = "black") +
+  labs(x = "predicted probability", y = "observed frequency",
+       title = "calibration curve") +
+  lims(x = c(0, 0.8), y = c(0, 1)) +
+  theme_bw()
 
 # Brier score
 mean((test$Win_Bid - pred)^2)
@@ -390,7 +401,11 @@ classif_table_v[20,]
 ## YoudenJ: -0.142
 
 
-
+# youden's index: add weights for tpr (sens) and tnr (spec) if desired
+classif_table_v$youdenJ <- with(classif_table_v, (0.35*tpr) + (0.65*tnr) - 1)
+# find row with max
+classif_table_v[which(classif_table_v$youdenJ >= -0.1558071),]
+classif_table_v[which.max(classif_table_v$youdenJ),]
 
 
 
